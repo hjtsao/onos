@@ -16,6 +16,7 @@
 
 package org.onosproject.drivers.hp;
 
+import com.google.common.collect.ImmutableList;
 import org.onosproject.openflow.controller.driver.AbstractOpenFlowSwitch;
 import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeAlreadyStarted;
 import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeCompleted;
@@ -54,14 +55,14 @@ public class HPSwitchHandshaker extends AbstractOpenFlowSwitch {
                 .setOutGroup(OFGroup.ANY)
                 .build();
 
-        sendHandshakeMessage(fm);
+        sendMsg(ImmutableList.of(fm));
 
         OFGroupMod gm = factory().buildGroupDelete()
                 .setGroup(OFGroup.ALL)
                 .setGroupType(OFGroupType.ALL)
                 .build();
 
-        sendHandshakeMessage(gm);
+        sendMsg(ImmutableList.of(gm));
 
         handshakeComplete.set(true);
 

@@ -17,8 +17,6 @@ package org.onosproject.net.provider;
 
 import com.google.common.collect.ImmutableSet;
 import org.onosproject.net.DeviceId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -57,37 +55,24 @@ public abstract class AbstractProviderRegistry<P extends Provider, S extends Pro
         return null;
     }
 
-    private static final Logger log = LoggerFactory
-        .getLogger(AbstractProviderRegistry.class);
-
     @Override
     public synchronized S register(P provider) {
-
-        log.debug("registering provider {} :{}", provider, provider.id());
         checkNotNull(provider, "Provider cannot be null");
+        checkState(!services.containsKey(provider.id()), "Provider %s already registered", provider.id());
 
         // If the provider is a primary one, check for a conflict.
         ProviderId pid = provider.id();
         checkState(pid.isAncillary() || !providersByScheme.containsKey(pid.scheme()),
-            "A primary provider with id %s is already registered",
-            providersByScheme.get(pid.scheme()));
+                   "A primary provider with id %s is already registered",
+                   providersByScheme.get(pid.scheme()));
 
-        checkState(pid.isAncillary() || !services.containsKey(provider.id()),
-            "Provider %s already registered", provider.id());
+        S service = createProviderService(provider);
+        services.put(provider.id(), service);
+        providers.put(provider.id(), provider);
 
         // Register the provider by URI scheme only if it is not ancillary.
-        S service = null;
-
         if (!pid.isAncillary()) {
-            service = createProviderService(provider);
-            services.put(provider.id(), service);
-            providers.put(provider.id(), provider);
             providersByScheme.put(pid.scheme(), provider);
-        } else {
-            ProviderId servicePid = new ProviderId(provider.id().scheme(), provider.id().id(), false);
-            service = services.get(servicePid);
-            checkState(service != null,
-                "Primary provider with id %s not registered yet", pid);
         }
 
         return service;

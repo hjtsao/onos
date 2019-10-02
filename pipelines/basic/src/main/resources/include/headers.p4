@@ -22,13 +22,13 @@
 @controller_header("packet_in")
 header packet_in_header_t {
     bit<9> ingress_port;
-    bit<7> _padding;
+    bit<7> role_id;
 }
 
 @controller_header("packet_out")
 header packet_out_header_t {
     bit<9> egress_port;
-    bit<7> _padding;
+    bit<7> role_id;
 }
 
 header ethernet_t {
@@ -37,6 +37,13 @@ header ethernet_t {
     bit<16> ether_type;
 }
 const bit<8> ETH_HEADER_LEN = 14;
+
+header vlan_t {
+    bit<3> pcp;
+    bit<1> cfi;
+    bit<12> vid;
+    bit<16> ether_type;
+}
 
 header ipv4_t {
     bit<4>  version;

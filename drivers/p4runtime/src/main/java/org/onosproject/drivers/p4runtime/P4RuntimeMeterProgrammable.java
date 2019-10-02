@@ -31,7 +31,7 @@ import org.onosproject.net.pi.model.PiMeterId;
 import org.onosproject.net.pi.model.PiMeterModel;
 import org.onosproject.net.pi.model.PiPipelineModel;
 import org.onosproject.net.pi.runtime.PiMeterCellConfig;
-import org.onosproject.net.pi.runtime.PiMeterCellHandle;
+import org.onosproject.net.pi.runtime.PiMeterHandle;
 import org.onosproject.net.pi.service.PiMeterTranslator;
 import org.onosproject.net.pi.service.PiTranslationException;
 
@@ -40,10 +40,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+
+import static com.google.common.collect.Lists.newArrayList;
 
 /**
  * Implementation of MeterProgrammable behaviour for P4Runtime.
@@ -51,12 +54,12 @@ import java.util.stream.Collectors;
 public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviour implements MeterProgrammable {
 
     private static final int METER_LOCK_EXPIRE_TIME_IN_MIN = 10;
-    private static final LoadingCache<PiMeterCellHandle, Lock>
+    private static final LoadingCache<PiMeterHandle, Lock>
             ENTRY_LOCKS = CacheBuilder.newBuilder()
             .expireAfterAccess(METER_LOCK_EXPIRE_TIME_IN_MIN, TimeUnit.MINUTES)
-            .build(new CacheLoader<PiMeterCellHandle, Lock>() {
+            .build(new CacheLoader<PiMeterHandle, Lock>() {
                 @Override
-                public Lock load(PiMeterCellHandle handle) {
+                public Lock load(PiMeterHandle handle) {
                     return new ReentrantLock();
                 }
             });
@@ -66,12 +69,12 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
     private PiPipelineModel pipelineModel;
 
     @Override
-    protected boolean setupBehaviour(String opName) {
-        if (!super.setupBehaviour(opName)) {
+    protected boolean setupBehaviour() {
+        if (!super.setupBehaviour()) {
             return false;
         }
 
-        translator = translationService.meterTranslator();
+        translator = piTranslationService.meterTranslator();
         meterMirror = handler().get(P4RuntimeMeterMirror.class);
         pipelineModel = pipeconf.pipelineModel();
         return true;
@@ -80,7 +83,7 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
     @Override
     public CompletableFuture<Boolean> performMeterOperation(MeterOperation meterOp) {
 
-        if (!setupBehaviour("performMeterOperation()")) {
+        if (!setupBehaviour()) {
             return CompletableFuture.completedFuture(false);
         }
 
@@ -90,7 +93,7 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
     private boolean processMeterOp(MeterOperation meterOp) {
 
         if (meterOp.type() != MeterOperation.Type.MODIFY) {
-            log.warn("P4Runtime meter operations must be MODIFY!");
+            log.warn("P4runtime meter operations must be MODIFY!");
             return false;
         }
 
@@ -103,10 +106,11 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
             return false;
         }
 
-        final PiMeterCellHandle handle = PiMeterCellHandle.of(deviceId, piMeterCellConfig);
+        final PiMeterHandle handle = PiMeterHandle.of(deviceId, piMeterCellConfig);
         ENTRY_LOCKS.getUnchecked(handle).lock();
-        final boolean result = client.write(p4DeviceId, pipeconf)
-                .modify(piMeterCellConfig).submitSync().isSuccess();
+        final boolean result = getFutureWithDeadline(
+                client.writeMeterCells(newArrayList(piMeterCellConfig), pipeconf),
+                "writing meter cells", false);
         if (result) {
             meterMirror.put(handle, piMeterCellConfig);
         }
@@ -118,7 +122,7 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
     @Override
     public CompletableFuture<Collection<Meter>> getMeters() {
 
-        if (!setupBehaviour("getMeters()")) {
+        if (!setupBehaviour()) {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
 
@@ -129,8 +133,13 @@ public class P4RuntimeMeterProgrammable extends AbstractP4RuntimeHandlerBehaviou
             meterIds.add(mode.id());
         }
 
-        piMeterCellConfigs = client.read(p4DeviceId, pipeconf)
-                .meterCells(meterIds).submitSync().all(PiMeterCellConfig.class);
+        try {
+            piMeterCellConfigs = client.readAllMeterCells(meterIds, pipeconf).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Exception while reading meters from {}: {}", deviceId, e.toString());
+            log.debug("", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
 
         Collection<Meter> meters = piMeterCellConfigs.stream()
                 .map(p -> {

@@ -15,7 +15,6 @@
  */
 package org.onosproject.app;
 
-import com.google.common.collect.ImmutableSet;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.event.ListenerService;
@@ -86,14 +85,4 @@ public interface ApplicationService
     default InputStream getApplicationArchive(ApplicationId appId) {
         return null;
     }
-
-    /**
-     * Returns the set of all installed applications.
-     *
-     * @return set of apps putside the build/core environment
-     */
-    default Set<Application> getRegisteredApplications() {
-        return ImmutableSet.of();
-    }
-
 }

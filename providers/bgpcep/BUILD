@@ -20,11 +20,6 @@ onos_app(
     category = "Provider",
     description = "BGPCEP providers.",
     included_bundles = BUNDLES,
-    required_apps = [
-        "org.onosproject.tunnel",
-        "org.onosproject.bgp",
-        "org.onosproject.pcep-api",
-    ],
     title = "BGPCEP Provider",
     url = "http://onosproject.org",
 )

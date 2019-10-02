@@ -17,6 +17,12 @@ package org.onosproject.cfg.impl;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.AbstractAccumulator;
 import org.onlab.util.Accumulator;
 import org.onlab.util.SharedExecutors;
@@ -27,11 +33,6 @@ import org.onosproject.cfg.ComponentConfigStoreDelegate;
 import org.onosproject.cfg.ConfigProperty;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -47,15 +48,15 @@ import java.util.Set;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
-import static org.onosproject.security.AppPermission.Type.CONFIG_READ;
-import static org.onosproject.security.AppPermission.Type.CONFIG_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
+import static org.onosproject.security.AppPermission.Type.*;
 
 
 /**
  * Implementation of the centralized component configuration service.
  */
-@Component(immediate = true, service = ComponentConfigService.class)
+@Component(immediate = true)
+@Service
 public class ComponentConfigManager implements ComponentConfigService {
 
     private static final String COMPONENT_NULL = "Component name cannot be null";
@@ -76,10 +77,10 @@ public class ComponentConfigManager implements ComponentConfigService {
     private final ComponentConfigStoreDelegate delegate = new InternalStoreDelegate();
     private final InternalAccumulator accumulator = new InternalAccumulator();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigStore store;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ConfigurationAdmin cfgAdmin;
 
     // Locally maintained catalog of definitions.
@@ -111,10 +112,6 @@ public class ComponentConfigManager implements ComponentConfigService {
 
         String componentName = componentClass.getName();
         String resourceName = componentClass.getSimpleName() + RESOURCE_EXT;
-        if (componentClass.getResource(resourceName) == null) {
-            // Try looking in my/package/name/MyClass.cfgdef
-            resourceName = componentClass.getCanonicalName().replace('.', '/') + RESOURCE_EXT;
-        }
         try (InputStream ris = componentClass.getResourceAsStream(resourceName)) {
             checkArgument(ris != null, "Property definitions not found at resource %s",
                           resourceName);
@@ -176,17 +173,12 @@ public class ComponentConfigManager implements ComponentConfigService {
 
     @Override
     public void preSetProperty(String componentName, String name, String value) {
-        preSetProperty(componentName, name, value, true);
-    }
-
-    @Override
-    public void preSetProperty(String componentName, String name, String value, boolean override) {
         checkPermission(CONFIG_WRITE);
 
         checkNotNull(componentName, COMPONENT_NULL);
         checkNotNull(name, PROPERTY_NULL);
         checkValidity(componentName, name, value);
-        store.setProperty(componentName, name, value, override);
+        store.setProperty(componentName, name, value);
     }
 
     @Override
@@ -373,16 +365,10 @@ public class ComponentConfigManager implements ComponentConfigService {
                     } else if (!Objects.equals(globalValue, localValue)) {
                         // If the local value is different from global value
                         // validate the global value and apply it locally.
-                        String newValue;
-                        if (globalValue != null) {
-                            newValue = globalValue;
-                        } else {
-                            newValue = localValue;
-                        }
                         log.debug("Setting {} property {} to {}",
-                                  componentName, name, newValue);
-                        checkValidity(componentName, name, newValue);
-                        set(componentName, name, newValue);
+                                  componentName, name, globalValue);
+                        checkValidity(componentName, name, globalValue);
+                        set(componentName, name, globalValue);
 
                     } else {
                         // Otherwise, simply update the registered property
@@ -392,8 +378,8 @@ public class ComponentConfigManager implements ComponentConfigService {
                         map.put(name, ConfigProperty.setProperty(p, globalValue));
                     }
                 } catch (IllegalArgumentException e) {
-                    log.warn("Value {} for property {} is not a valid {}; using default",
-                             globalValue, name, p.type());
+                    log.warn("Value {} is not a valid {}; using default",
+                             globalValue, p.type());
                     reset(componentName, name);
                 }
             }

@@ -17,7 +17,7 @@
 package org.onosproject.p4runtime.model;
 
 import com.google.common.collect.ImmutableList;
-import org.onosproject.net.pi.model.PiPacketMetadataModel;
+import org.onosproject.net.pi.model.PiControlMetadataModel;
 import org.onosproject.net.pi.model.PiPacketOperationModel;
 import org.onosproject.net.pi.model.PiPacketOperationType;
 
@@ -30,10 +30,10 @@ import java.util.Objects;
 final class P4PacketOperationModel implements PiPacketOperationModel {
 
     private final PiPacketOperationType type;
-    private final ImmutableList<PiPacketMetadataModel> metadatas;
+    private final ImmutableList<PiControlMetadataModel> metadatas;
 
     P4PacketOperationModel(PiPacketOperationType type,
-                                  ImmutableList<PiPacketMetadataModel> metadatas) {
+                                  ImmutableList<PiControlMetadataModel> metadatas) {
         this.type = type;
         this.metadatas = metadatas;
     }
@@ -44,7 +44,7 @@ final class P4PacketOperationModel implements PiPacketOperationModel {
     }
 
     @Override
-    public List<PiPacketMetadataModel> metadatas() {
+    public List<PiControlMetadataModel> metadatas() {
         return metadatas;
     }
 

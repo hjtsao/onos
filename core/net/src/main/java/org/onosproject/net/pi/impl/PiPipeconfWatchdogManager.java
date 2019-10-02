@@ -17,8 +17,15 @@
 package org.onosproject.net.pi.impl;
 
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Striped;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
@@ -35,8 +42,6 @@ import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.model.PiPipeconfId;
-import org.onosproject.net.pi.service.PiPipeconfEvent;
-import org.onosproject.net.pi.service.PiPipeconfListener;
 import org.onosproject.net.pi.service.PiPipeconfMappingStore;
 import org.onosproject.net.pi.service.PiPipeconfService;
 import org.onosproject.net.pi.service.PiPipeconfWatchdogEvent;
@@ -49,27 +54,21 @@ import org.onosproject.store.service.EventuallyConsistentMapListener;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
+import java.util.Collections;
 import java.util.Dictionary;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 
-import static java.util.Collections.singleton;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.net.OsgiPropertyConstants.PWM_PROBE_INTERVAL;
-import static org.onosproject.net.OsgiPropertyConstants.PWM_PROBE_INTERVAL_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -77,13 +76,8 @@ import static org.slf4j.LoggerFactory.getLogger;
  * pipeline probe task and listens for device events to update the status of the
  * pipeline.
  */
-@Component(
-        immediate = true,
-        service = PiPipeconfWatchdogService.class,
-        property = {
-                PWM_PROBE_INTERVAL + ":Integer=" + PWM_PROBE_INTERVAL_DEFAULT
-        }
-)
+@Component(immediate = true)
+@Service
 public class PiPipeconfWatchdogManager
         extends AbstractListenerManager<PiPipeconfWatchdogEvent, PiPipeconfWatchdogListener>
         implements PiPipeconfWatchdogService {
@@ -91,35 +85,38 @@ public class PiPipeconfWatchdogManager
     private final Logger log = getLogger(getClass());
 
     private static final long SECONDS = 1000L;
+    // Long enough to allow for network delay (e.g. to transfer large pipeline
+    // binaries over slow network).
+    private static final long PIPECONF_SET_TIMEOUT = 60; // Seconds.
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiPipeconfMappingStore pipeconfMappingStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PiPipeconfService pipeconfService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private ComponentConfigService componentConfigService;
 
-    /**
-     * Configure interval in seconds for device pipeconf probing.
-     */
-    private int probeInterval = PWM_PROBE_INTERVAL_DEFAULT;
+    private static final String PROBE_INTERVAL = "probeInterval";
+    private static final int DEFAULT_PROBE_INTERVAL = 15;
+    @Property(name = PROBE_INTERVAL, intValue = DEFAULT_PROBE_INTERVAL,
+            label = "Configure interval in seconds for device pipeconf probing")
+    private int probeInterval = DEFAULT_PROBE_INTERVAL;
 
     protected ExecutorService executor = Executors.newFixedThreadPool(
             30, groupedThreads("onos/pipeconf-watchdog", "%d", log));
 
-    private final DeviceListener deviceListener = new InternalDeviceListener();
-    private final PiPipeconfListener pipeconfListener = new InternalPipeconfListener();
+    private final InternalDeviceListener deviceListener = new InternalDeviceListener();
 
     private Timer timer;
     private TimerTask task;
@@ -147,9 +144,8 @@ public class PiPipeconfWatchdogManager
         // Start periodic watchdog task.
         timer = new Timer();
         startProbeTask();
-        // Add listeners.
+        // Add device listener.
         deviceService.addListener(deviceListener);
-        pipeconfService.addListener(pipeconfListener);
         log.info("Started");
     }
 
@@ -162,9 +158,9 @@ public class PiPipeconfWatchdogManager
         Dictionary<?, ?> properties = context.getProperties();
         final int oldProbeInterval = probeInterval;
         probeInterval = Tools.getIntegerProperty(
-                properties, PWM_PROBE_INTERVAL, PWM_PROBE_INTERVAL_DEFAULT);
+                properties, PROBE_INTERVAL, DEFAULT_PROBE_INTERVAL);
         log.info("Configured. {} is configured to {} seconds",
-                 PWM_PROBE_INTERVAL_DEFAULT, probeInterval);
+                 PROBE_INTERVAL, probeInterval);
 
         if (oldProbeInterval != probeInterval) {
             rescheduleProbeTask();
@@ -174,7 +170,6 @@ public class PiPipeconfWatchdogManager
     @Deactivate
     public void deactivate() {
         eventDispatcher.removeSink(PiPipeconfWatchdogEvent.class);
-        pipeconfService.removeListener(pipeconfListener);
         deviceService.removeListener(deviceListener);
         stopProbeTask();
         timer = null;
@@ -187,7 +182,7 @@ public class PiPipeconfWatchdogManager
     public void triggerProbe(DeviceId deviceId) {
         final Device device = deviceService.getDevice(deviceId);
         if (device != null) {
-            filterAndTriggerTasks(singleton(device));
+            filterAndTriggerTasks(Collections.singleton(device));
         }
     }
 
@@ -208,13 +203,13 @@ public class PiPipeconfWatchdogManager
             }
 
             final PiPipeconfId pipeconfId = pipeconfMappingStore.getPipeconfId(device.id());
-            if (pipeconfId == null || !device.is(PiPipelineProgrammable.class)) {
+            if (pipeconfId == null
+                    || !device.is(PiPipelineProgrammable.class)) {
                 return;
             }
 
             if (!pipeconfService.getPipeconf(pipeconfId).isPresent()) {
-                log.warn("Pipeconf {} is not registered, skipping probe for {}",
-                         pipeconfId, device.id());
+                log.error("Pipeconf {} is not registered", pipeconfId);
                 return;
             }
 
@@ -250,15 +245,29 @@ public class PiPipeconfWatchdogManager
         log.debug("Starting watchdog task for {} ({})", device.id(), pipeconf.id());
         final PiPipelineProgrammable pipelineProg = device.as(PiPipelineProgrammable.class);
         final DeviceHandshaker handshaker = device.as(DeviceHandshaker.class);
-        if (!handshaker.hasConnection()) {
+        if (!handshaker.isConnected()) {
             return false;
         }
-        if (Futures.getUnchecked(pipelineProg.isPipeconfSet(pipeconf))) {
+        if (pipelineProg.isPipeconfSet(pipeconf)) {
             log.debug("Pipeconf {} already configured on {}",
                       pipeconf.id(), device.id());
             return true;
         }
-        return Futures.getUnchecked(pipelineProg.setPipeconf(pipeconf));
+        try {
+            return pipelineProg.setPipeconf(pipeconf)
+                    .get(PIPECONF_SET_TIMEOUT, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            log.error("Thread interrupted while setting pipeconf on {}",
+                      device.id());
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException e) {
+            log.error("Exception while setting pipeconf on {}",
+                      device.id(), e.getCause());
+        } catch (TimeoutException e) {
+            log.error("Operation TIMEOUT while setting pipeconf on {}",
+                      device.id());
+        }
+        return false;
     }
 
     private Runnable withLock(Runnable task, Object object) {
@@ -295,7 +304,7 @@ public class PiPipeconfWatchdogManager
     }
 
     private void startProbeTask() {
-        synchronized (this) {
+        synchronized (timer) {
             log.info("Starting pipeline probe thread with {} seconds interval...", probeInterval);
             task = new InternalTimerTask();
             timer.scheduleAtFixedRate(task, probeInterval * SECONDS,
@@ -305,7 +314,7 @@ public class PiPipeconfWatchdogManager
 
 
     private void stopProbeTask() {
-        synchronized (this) {
+        synchronized (timer) {
             log.info("Stopping pipeline probe thread...");
             task.cancel();
             task = null;
@@ -314,7 +323,7 @@ public class PiPipeconfWatchdogManager
 
 
     private synchronized void rescheduleProbeTask() {
-        synchronized (this) {
+        synchronized (timer) {
             stopProbeTask();
             startProbeTask();
         }
@@ -341,14 +350,6 @@ public class PiPipeconfWatchdogManager
                 case DEVICE_AVAILABILITY_CHANGED:
                     if (!deviceService.isAvailable(device.id())) {
                         signalStatusUnknown(device.id());
-                    } else {
-                        // The GeneralDeviceProvider marks online devices that
-                        // have ANY pipeline config set. Here we make sure the
-                        // one configured in the pipeconf service is the
-                        // expected one. Clearly, it would be better to let the
-                        // GDP do this check and avoid sending twice the same
-                        // message to the switch.
-                        filterAndTriggerTasks(singleton(device));
                     }
                     break;
                 case DEVICE_REMOVED:
@@ -362,19 +363,6 @@ public class PiPipeconfWatchdogManager
                 default:
                     break;
             }
-        }
-    }
-
-    private class InternalPipeconfListener implements PiPipeconfListener {
-        @Override
-        public void event(PiPipeconfEvent event) {
-            pipeconfMappingStore.getDevices(event.subject())
-                    .forEach(PiPipeconfWatchdogManager.this::triggerProbe);
-        }
-
-        @Override
-        public boolean isRelevant(PiPipeconfEvent event) {
-            return Objects.equals(event.type(), PiPipeconfEvent.Type.REGISTERED);
         }
     }
 

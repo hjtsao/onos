@@ -18,8 +18,9 @@ package org.onosproject.net.intent.impl.compiler;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.graph.DefaultEdgeWeigher;
 import org.onlab.graph.ScalarWeight;
 import org.onlab.graph.Weight;
@@ -65,6 +66,7 @@ import java.util.stream.Collectors;
  * Base class for compilers of various
  * {@link org.onosproject.net.intent.ConnectivityIntent connectivity intents}.
  */
+@Component(immediate = true)
 public abstract class ConnectivityIntentCompiler<T extends ConnectivityIntent>
         implements IntentCompiler<T> {
 
@@ -72,16 +74,16 @@ public abstract class ConnectivityIntentCompiler<T extends ConnectivityIntent>
 
     private static final Logger log = LoggerFactory.getLogger(ConnectivityIntentCompiler.class);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected IntentExtensionService intentManager;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PathService pathService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ResourceService resourceService;
 
     /**

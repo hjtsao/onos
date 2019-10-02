@@ -506,35 +506,23 @@ public class HostLocationProviderTest {
     }
 
     /**
-     * When receiving RouterAdvertisement, update location and IP.
+     * When receiving RouterAdvertisement, ignores it.
      */
     @Test
     public void receivesRa() {
         testProcessor.process(new TestRAPacketContext(DEV4));
         TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat("receivesRa. No host description expected",
-                providerService.descriptions.size(), is(1)));
-
-        final HostDescription desc = providerService.descriptions.get(0);
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.location(), is(LOCATION2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.hwAddress(), is(MAC2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.ipAddress().toArray()[0], is(IP_ADDRESS2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.vlan(), is(VLAN)));
+                providerService.descriptions.size(), is(0)));
     }
 
     /**
-     * When receiving RouterSolicitation, update location and IP.
+     * When receiving RouterSolicitation, ignores it.
      */
     @Test
     public void receiveRs() {
         testProcessor.process(new TestRSPacketContext(DEV4));
         TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat("receiveRs. No host description expected",
-                providerService.descriptions.size(), is(1)));
-
-        final HostDescription desc = providerService.descriptions.get(0);
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.location(), is(LOCATION2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.hwAddress(), is(MAC2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.ipAddress().toArray()[0], is(IP_ADDRESS2)));
-        TestTools.assertAfter(ASSERTION_DELAY, () -> assertThat(desc.vlan(), is(VLAN)));
+                providerService.descriptions.size(), is(0)));
     }
 
     /**
@@ -1046,7 +1034,7 @@ public class HostLocationProviderTest {
             IPv6 ipv6 = new IPv6();
             ipv6.setPayload(icmp6);
             ipv6.setDestinationAddress(Ip6Address.valueOf("ff02::2").toOctets());
-            ipv6.setSourceAddress(IP2);
+            ipv6.setSourceAddress(Ip6Address.valueOf("::").toOctets());
             Ethernet eth = new Ethernet();
             eth.setEtherType(Ethernet.TYPE_IPV6)
                     .setVlanID(VLAN.toShort())

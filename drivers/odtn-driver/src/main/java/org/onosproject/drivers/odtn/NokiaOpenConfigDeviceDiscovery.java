@@ -40,10 +40,6 @@ import org.onosproject.netconf.NetconfDevice;
 import org.onosproject.netconf.NetconfException;
 import org.onosproject.netconf.NetconfSession;
 import org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery;
-import org.onosproject.net.OchSignal;
-import org.onosproject.net.optical.device.OchPortHelper;
-import org.onosproject.net.OduSignalType;
-import org.onosproject.net.ChannelSpacing;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
@@ -150,56 +146,28 @@ public class NokiaOpenConfigDeviceDiscovery
      * @return PortDescription or null if component is not an ONOS Port
      */
     private PortDescription toPortDescriptionInternal(HierarchicalConfiguration component) {
-        Map<String, String> annotations = new HashMap<>();
+        Map<String, String> props = new HashMap<>();
         String name = component.getString("name");
         String type = component.getString("state/type");
         checkNotNull(name, "name not found");
         checkNotNull(type, "state/type not found");
-        annotations.put(OdtnDeviceDescriptionDiscovery.OC_NAME, name);
-        annotations.put(OdtnDeviceDescriptionDiscovery.OC_TYPE, type);
-
-        component.configurationsAt("properties/property")
-                .forEach(property -> {
-                    String pn = property.getString("name");
-                    String pv = property.getString("state/value");
-                    annotations.put(pn, pv);
-                });
-
+        props.put(OdtnDeviceDescriptionDiscovery.OC_NAME, name);
+        props.put(OdtnDeviceDescriptionDiscovery.OC_TYPE, type);
+        Builder builder = DefaultPortDescription.builder();
         if (type.equals("oc-platform-types:PORT")) {
-
             String subComponentName = component.getString("subcomponents/subcomponent/name");
             String[] textStr = subComponentName.split("-");
             String portComponentType = textStr[0];
             String portComponentIndex = textStr[textStr.length - 1];
-
-             if (portComponentType.equals(OPTICAL_CHANNEL)) {
-
-                 annotations.putIfAbsent(PORT_TYPE, OdtnPortType.LINE.value());
-                 annotations.putIfAbsent(ONOS_PORT_INDEX, portComponentIndex.toString());
-                 annotations.putIfAbsent(CONNECTION_ID, "connection" + portComponentIndex.toString());
-
-                 OchSignal signalId = OchSignal.newDwdmSlot(ChannelSpacing.CHL_50GHZ, 1);
-                 return OchPortHelper.ochPortDescription(
-                        PortNumber.portNumber(Long.parseLong(portComponentIndex)),
-                        true,
-                        OduSignalType.ODU4, // TODO Client signal to be discovered
-                        true,
-                        signalId,
-                        DefaultAnnotations.builder().putAll(annotations).build());
-
-             } else if (portComponentType.equals(TRANSCEIVER)) {
-
-                 Builder builder = DefaultPortDescription.builder();
-                 annotations.putIfAbsent(PORT_TYPE, OdtnPortType.CLIENT.value());
-                 annotations.putIfAbsent(ONOS_PORT_INDEX, portComponentIndex.toString());
-                 annotations.putIfAbsent(CONNECTION_ID, "connection" + portComponentIndex.toString());
-
-                 builder.withPortNumber(PortNumber.portNumber(Long.parseLong(portComponentIndex), subComponentName));
-                 builder.type(Type.PACKET);
-
-                 builder.annotations(DefaultAnnotations.builder().putAll(annotations).build());
-                 return builder.build();
-
+            builder.withPortNumber(PortNumber.portNumber(Long.parseLong(portComponentIndex), subComponentName));
+            if (portComponentType.equals(OPTICAL_CHANNEL)) {
+                builder.type(Type.OCH);
+                props.putIfAbsent(PORT_TYPE, OdtnPortType.LINE.value());
+                props.putIfAbsent(CONNECTION_ID, portComponentIndex);
+            } else if (portComponentType.equals(TRANSCEIVER)) {
+                builder.type(Type.PACKET);
+                props.putIfAbsent(PORT_TYPE, OdtnPortType.CLIENT.value());
+                props.putIfAbsent(CONNECTION_ID, portComponentIndex);
             } else {
                 log.debug("Unknown port component type {}", type);
                 return null;
@@ -208,6 +176,9 @@ public class NokiaOpenConfigDeviceDiscovery
             log.debug("Another component type {}", type);
             return null;
         }
+
+        builder.annotations(DefaultAnnotations.builder().putAll(props).build());
+        return builder.build();
     }
 
     /**
@@ -242,7 +213,7 @@ public class NokiaOpenConfigDeviceDiscovery
         } catch (NetconfException e) {
             log.error("can not login to device", e);
         }
-        return ns;
+        return null;
     }
 
     //crude way of removing rpc-reply envelope (copy from netconf session)
@@ -305,9 +276,9 @@ public class NokiaOpenConfigDeviceDiscovery
     private String buildLoginRpc(String userName, String passwd) {
         StringBuilder rpc = new StringBuilder(RPC_TAG_NETCONF_BASE);
         rpc.append("<login xmlns=\"http://nokia.com/yang/nokia-security\">");
-        rpc.append("<user>");
+        rpc.append("<username>");
         rpc.append(userName);
-        rpc.append("</user>");
+        rpc.append("</username>");
         rpc.append("<password>");
         rpc.append(passwd);
         rpc.append("</password>");

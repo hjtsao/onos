@@ -21,8 +21,6 @@ import org.onosproject.net.device.PortDescription;
 
 import com.google.common.annotations.Beta;
 
-import java.util.Optional;
-
 /**
  * {@link ConfigOperator} for Port.
  * <p>
@@ -38,17 +36,6 @@ public interface PortConfigOperator extends ConfigOperator {
      */
     void bindService(NetworkConfigService networkConfigService);
 
-    /**
-     * Generates a PortDescription containing fields from a PortDescription and
-     * configuration.
-     *
-     * @param cp {@link ConnectPoint} representing the port.
-     * @param descr input {@link PortDescription}
-     * @return Combined {@link PortDescription}
-     * @deprecated onos-2.0
-     */
-    @Deprecated
-    PortDescription combine(ConnectPoint cp, PortDescription descr);
 
     /**
      * Generates a PortDescription containing fields from a PortDescription and
@@ -56,10 +43,9 @@ public interface PortConfigOperator extends ConfigOperator {
      *
      * @param cp {@link ConnectPoint} representing the port.
      * @param descr input {@link PortDescription}
-     * @param prevConf previous Config {@link Config}
      * @return Combined {@link PortDescription}
      */
-    PortDescription combine(ConnectPoint cp, PortDescription descr, Optional<Config> prevConf);
+    PortDescription combine(ConnectPoint cp, PortDescription descr);
 
     /**
      * Generates a PortDescription containing fields from a PortDescription and

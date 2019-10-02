@@ -21,6 +21,7 @@
 #include "defines.p4"
 
 control packetio_ingress(inout headers_t hdr,
+                         inout local_metadata_t local_metadata,
                          inout standard_metadata_t standard_metadata) {
     apply {
         if (standard_metadata.ingress_port == CPU_PORT) {
@@ -32,11 +33,13 @@ control packetio_ingress(inout headers_t hdr,
 }
 
 control packetio_egress(inout headers_t hdr,
+                        inout local_metadata_t local_metadata,
                         inout standard_metadata_t standard_metadata) {
     apply {
         if (standard_metadata.egress_port == CPU_PORT) {
             hdr.packet_in.setValid();
             hdr.packet_in.ingress_port = standard_metadata.ingress_port;
+            hdr.packet_in.role_id = local_metadata.role_id;
         }
     }
 }

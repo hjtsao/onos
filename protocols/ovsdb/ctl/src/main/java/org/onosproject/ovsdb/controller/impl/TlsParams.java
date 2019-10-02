@@ -29,7 +29,8 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Objects;
 
-import static org.onosproject.ovsdb.controller.impl.OsgiPropertyConstants.*;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.DEFAULT_KS_FILE;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.DEFAULT_KS_PASSWORD;
 
 /**
  * TlsParams Class for properties required for configuring OVSDB TLS Connection.
@@ -68,10 +69,10 @@ public class TlsParams {
      */
     TlsParams() {
         this.mode = TlsMode.DISABLED;
-        this.ksLocation = KS_FILE_DEFAULT;
-        this.tsLocation = TS_FILE_DEFAULT;
-        this.ksPwd = KS_PASSWORD_DEFAULT;
-        this.tsPwd = TS_PASSWORD_DEFAULT;
+        this.ksLocation = DEFAULT_KS_FILE;
+        this.tsLocation = DEFAULT_KS_FILE;
+        this.ksPwd = DEFAULT_KS_PASSWORD;
+        this.tsPwd = DEFAULT_KS_PASSWORD;
         this.ksSignature = getSha1Checksum(ksLocation);
         this.tsSignature = getSha1Checksum(tsLocation);
     }

@@ -17,9 +17,8 @@
 package org.onosproject.provider.nil.cli;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
 import org.onlab.packet.IpAddress;
 import org.onlab.util.Tools;
 import org.onosproject.net.ConnectPoint;
@@ -39,7 +38,6 @@ import static java.util.Objects.requireNonNull;
 /**
  * Adds a simulated end-station host to the custom topology simulation.
  */
-@Service
 @Command(scope = "onos", name = "null-create-host",
         description = "Adds a simulated end-station host to the custom topology simulation")
 public class CreateNullHost extends CreateNullEntity {
@@ -67,7 +65,7 @@ public class CreateNullHost extends CreateNullEntity {
     String locType = GEO;
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         NullProviders service = get(NullProviders.class);
         NetworkConfigService cfgService = get(NetworkConfigService.class);
 
@@ -78,13 +76,7 @@ public class CreateNullHost extends CreateNullEntity {
 
         CustomTopologySimulator sim = (CustomTopologySimulator) simulator;
         HostId id = sim.nextHostId();
-        Set<HostLocation> locations;
-        try {
-            locations = getLocations(sim, deviceNames);
-        } catch (NoLocationException e) {
-            error("\u001B[1;31mHost not created - no location (free port) available on %s\u001B[0m", e.getMessage());
-            return;
-        }
+        Set<HostLocation> locations = getLocations(sim, deviceNames);
         Set<IpAddress> ips = getIps(hostIps);
 
         BasicHostConfig cfg = cfgService.addConfig(id, BasicHostConfig.class);
@@ -103,15 +95,10 @@ public class CreateNullHost extends CreateNullEntity {
         return ips.build();
     }
 
-    private Set<HostLocation> getLocations(CustomTopologySimulator sim, String deviceNames)
-            throws NoLocationException {
+    private Set<HostLocation> getLocations(CustomTopologySimulator sim, String deviceNames) {
         ImmutableSet.Builder<HostLocation> locations = ImmutableSet.builder();
         String[] csv = deviceNames.split(",");
         for (String s : csv) {
-            HostLocation loc = findAvailablePort(sim.deviceId(s));
-            if (loc == null) {
-                throw new NoLocationException(deviceNames);
-            }
             locations.add(requireNonNull(findAvailablePort(sim.deviceId(s))));
         }
         return locations.build();

@@ -23,7 +23,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.concurrent.EventExecutorGroup;
@@ -77,8 +76,6 @@ public class OFChannelInitializer
         pipeline.addLast("ofmessageencoder", OFMessageEncoder.getInstance());
         pipeline.addLast("ofmessagedecoder", OFMessageDecoder.getInstance());
 
-        pipeline.addLast("consolidateflush", new FlushConsolidationHandler(
-                           FlushConsolidationHandler.DEFAULT_EXPLICIT_FLUSH_AFTER_FLUSHES, true));
         pipeline.addLast("idle", new IdleStateHandler(20, 25, 0));
         pipeline.addLast("timeout", new ReadTimeoutHandler(30));
 

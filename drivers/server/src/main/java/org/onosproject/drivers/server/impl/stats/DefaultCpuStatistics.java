@@ -48,7 +48,7 @@ public final class DefaultCpuStatistics implements CpuStatistics {
     private final int id;
     private final float load;
     private final int queue;
-    private final int busySince;
+    private final boolean isBusy;
     private final Optional<MonitoringUnit> throughputUnit;
     private final Optional<Float> averageThroughput;
     private final Optional<MonitoringUnit> latencyUnit;
@@ -56,11 +56,11 @@ public final class DefaultCpuStatistics implements CpuStatistics {
     private final Optional<Float> averageLatency;
     private final Optional<Float> maxLatency;
 
-    private DefaultCpuStatistics(DeviceId deviceId, int id, float load, int queue, int busySince) {
-        this(deviceId, id, load, queue, busySince, null, -1, null, -1, -1, -1);
+    private DefaultCpuStatistics(DeviceId deviceId, int id, float load, int queue, boolean isBusy) {
+        this(deviceId, id, load, queue, isBusy, null, -1, null, -1, -1, -1);
     }
 
-    private DefaultCpuStatistics(DeviceId deviceId, int id, float load, int queue, int busySince,
+    private DefaultCpuStatistics(DeviceId deviceId, int id, float load, int queue, boolean isBusy,
             MonitoringUnit throughputUnit, float averageThroughput, MonitoringUnit latencyUnit,
             float minLatency, float averageLatency, float maxLatency) {
         checkNotNull(deviceId, "Device ID is NULL");
@@ -69,11 +69,11 @@ public final class DefaultCpuStatistics implements CpuStatistics {
         checkArgument((load >= MIN_CPU_LOAD) && (load <= MAX_CPU_LOAD),
             "Invalid CPU load " + Float.toString(load) + ", not in [" + MIN_CPU_LOAD + ", " + MAX_CPU_LOAD + "]");
 
-        this.deviceId  = deviceId;
-        this.id        = id;
-        this.load      = load;
-        this.queue     = queue;
-        this.busySince = busySince;
+        this.deviceId = deviceId;
+        this.id       = id;
+        this.load     = load;
+        this.queue    = queue;
+        this.isBusy   = isBusy;
 
         this.throughputUnit = (throughputUnit == null) ?
                 Optional.empty() : Optional.ofNullable(throughputUnit);
@@ -91,11 +91,11 @@ public final class DefaultCpuStatistics implements CpuStatistics {
 
     // Constructor for serializer
     private DefaultCpuStatistics() {
-        this.deviceId  = null;
-        this.id        = 0;
-        this.load      = 0;
-        this.queue     = 0;
-        this.busySince = -1;
+        this.deviceId = null;
+        this.id       = 0;
+        this.load     = 0;
+        this.queue    = 0;
+        this.isBusy   = false;
 
         this.throughputUnit = null;
         this.averageThroughput = null;
@@ -131,12 +131,7 @@ public final class DefaultCpuStatistics implements CpuStatistics {
 
     @Override
     public boolean busy() {
-        return this.busySince >= 0;
-    }
-
-    @Override
-    public int busySince() {
-        return this.busySince;
+        return this.isBusy;
     }
 
     @Override
@@ -177,7 +172,7 @@ public final class DefaultCpuStatistics implements CpuStatistics {
                 .add("id",     id())
                 .add("load",   load())
                 .add("queue",  queue())
-                .add("busySince", busySince())
+                .add("isBusy", busy())
                 .add("throughputUnit", throughputUnit.orElse(null))
                 .add("averageThroughput", averageThroughput.orElse(null))
                 .add("latencyUnit", latencyUnit.orElse(null))
@@ -193,7 +188,7 @@ public final class DefaultCpuStatistics implements CpuStatistics {
         int      id;
         float    load = 0;
         int      queue = -1;
-        int      busySince = -1;
+        boolean  isBusy = false;
 
         MonitoringUnit throughputUnit = DEF_THROUGHPUT_UNIT;
         float averageThroughput = -1;
@@ -255,13 +250,13 @@ public final class DefaultCpuStatistics implements CpuStatistics {
         }
 
         /**
-         * Sets the CPU status (free or busy since some ms).
+         * Sets the CPU status (free or busy).
          *
-         * @param busySince CPU busy time in ms, -1 if not busy
+         * @param isBusy CPU status
          * @return builder object
          */
-        public Builder setBusySince(int busySince) {
-            this.busySince = busySince;
+        public Builder setIsBusy(boolean isBusy) {
+            this.isBusy = isBusy;
 
             return this;
         }
@@ -345,7 +340,7 @@ public final class DefaultCpuStatistics implements CpuStatistics {
          */
         public DefaultCpuStatistics build() {
             return new DefaultCpuStatistics(
-                deviceId, id, load, queue, busySince,
+                deviceId, id, load, queue, isBusy,
                 throughputUnit, averageThroughput,
                 latencyUnit, minLatency, averageLatency, maxLatency);
         }

@@ -1,4 +1,5 @@
 COMPILE_DEPS = CORE_DEPS + JACKSON + [
+    "//incubator/api:onos-incubator-api",
     "//protocols/tl1/api:onos-protocols-tl1-api",
 ]
 

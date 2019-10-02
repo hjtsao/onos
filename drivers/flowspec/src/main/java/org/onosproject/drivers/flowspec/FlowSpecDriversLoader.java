@@ -15,7 +15,7 @@
  */
 package org.onosproject.drivers.flowspec;
 
-import org.osgi.service.component.annotations.Component;
+import org.apache.felix.scr.annotations.Component;
 import org.onosproject.net.driver.AbstractDriverLoader;
 
 /**

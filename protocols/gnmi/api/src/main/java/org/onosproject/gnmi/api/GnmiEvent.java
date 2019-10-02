@@ -32,10 +32,15 @@ public final class GnmiEvent extends AbstractEvent<GnmiEvent.Type, GnmiEventSubj
         /**
          * Update.
          */
-        UPDATE
+        UPDATE,
+
+        /**
+         * Sync response.
+         */
+        SYNC_RESPONSE
     }
 
-    public GnmiEvent(Type type, GnmiEventSubject subject) {
+    protected GnmiEvent(Type type, GnmiEventSubject subject) {
         super(type, subject);
     }
 }

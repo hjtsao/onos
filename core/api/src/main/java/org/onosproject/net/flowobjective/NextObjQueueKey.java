@@ -23,7 +23,7 @@ import java.util.Objects;
 /**
  * Next objective queue key.
  */
-public class NextObjQueueKey implements ObjectiveQueueKey {
+public class NextObjQueueKey {
     private DeviceId deviceId;
     private int id;
 

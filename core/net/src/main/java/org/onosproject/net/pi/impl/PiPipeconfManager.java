@@ -20,14 +20,19 @@ import com.google.common.annotations.Beta;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Striped;
-import org.onlab.util.HexString;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.ItemNotFoundException;
 import org.onlab.util.SharedExecutors;
-import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.config.ConfigFactory;
 import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.net.config.basics.BasicDeviceConfig;
-import org.onosproject.net.device.PortStatisticsDiscovery;
+import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.driver.Behaviour;
 import org.onosproject.net.driver.DefaultDriver;
 import org.onosproject.net.driver.Driver;
@@ -37,15 +42,9 @@ import org.onosproject.net.driver.DriverListener;
 import org.onosproject.net.driver.DriverProvider;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.model.PiPipeconfId;
-import org.onosproject.net.pi.service.PiPipeconfEvent;
-import org.onosproject.net.pi.service.PiPipeconfListener;
+import org.onosproject.net.pi.service.PiPipeconfConfig;
 import org.onosproject.net.pi.service.PiPipeconfMappingStore;
 import org.onosproject.net.pi.service.PiPipeconfService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
@@ -60,7 +59,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.String.format;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -69,25 +67,25 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Implementation of the PiPipeconfService.
  */
-@Component(immediate = true, service = PiPipeconfService.class)
+@Component(immediate = true)
+@Service
 @Beta
-public class PiPipeconfManager
-        extends AbstractListenerManager<PiPipeconfEvent, PiPipeconfListener>
-        implements PiPipeconfService {
+public class PiPipeconfManager implements PiPipeconfService {
 
     private final Logger log = getLogger(getClass());
 
     private static final String MERGED_DRIVER_SEPARATOR = ":";
+    private static final String CFG_SCHEME = "piPipeconf";
 
     private static final int MISSING_DRIVER_WATCHDOG_INTERVAL = 5; // Seconds.
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigRegistry cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverAdminService driverAdminService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiPipeconfMappingStore pipeconfMappingStore;
 
     // Registered pipeconf are replicated through the app subsystem and
@@ -102,10 +100,20 @@ public class PiPipeconfManager
     protected ExecutorService executor = Executors.newFixedThreadPool(
             10, groupedThreads("onos/pipeconf-manager", "%d", log));
 
+    protected final ConfigFactory configFactory =
+            new ConfigFactory<DeviceId, PiPipeconfConfig>(
+                    SubjectFactories.DEVICE_SUBJECT_FACTORY,
+                    PiPipeconfConfig.class, CFG_SCHEME) {
+                @Override
+                public PiPipeconfConfig createConfig() {
+                    return new PiPipeconfConfig();
+                }
+            };
+
     @Activate
     public void activate() {
+        cfgService.registerConfigFactory(configFactory);
         driverAdminService.addListener(driverListener);
-        eventDispatcher.addSink(PiPipeconfEvent.class, listenerRegistry);
         checkMissingMergedDrivers();
         if (!missingMergedDrivers.isEmpty()) {
             // Missing drivers should be created upon detecting registration
@@ -120,8 +128,8 @@ public class PiPipeconfManager
 
     @Deactivate
     public void deactivate() {
-        eventDispatcher.removeSink(PiPipeconfEvent.class);
         executor.shutdown();
+        cfgService.unregisterConfigFactory(configFactory);
         driverAdminService.removeListener(driverListener);
         pipeconfs.clear();
         missingMergedDrivers.clear();
@@ -132,30 +140,24 @@ public class PiPipeconfManager
 
     @Override
     public void register(PiPipeconf pipeconf) throws IllegalStateException {
-        checkNotNull(pipeconf);
         if (pipeconfs.containsKey(pipeconf.id())) {
             throw new IllegalStateException(format("Pipeconf %s is already registered", pipeconf.id()));
         }
         pipeconfs.put(pipeconf.id(), pipeconf);
-        log.info("New pipeconf registered: {} (fingerprint={})",
-                 pipeconf.id(), HexString.toHexString(pipeconf.fingerprint()));
+        log.info("New pipeconf registered: {}", pipeconf.id());
         executor.execute(() -> attemptMergeAll(pipeconf.id()));
-        post(new PiPipeconfEvent(PiPipeconfEvent.Type.REGISTERED, pipeconf));
     }
 
     @Override
-    public void unregister(PiPipeconfId pipeconfId) throws IllegalStateException {
-        checkNotNull(pipeconfId);
+    public void remove(PiPipeconfId pipeconfId) throws IllegalStateException {
         // TODO add mechanism to remove from device.
         if (!pipeconfs.containsKey(pipeconfId)) {
             throw new IllegalStateException(format("Pipeconf %s is not registered", pipeconfId));
         }
         // TODO remove the binding from the distributed Store when the lifecycle of a pipeconf is defined.
         // pipeconfMappingStore.removeBindings(pipeconfId);
-        final PiPipeconf pipeconf = pipeconfs.remove(pipeconfId);
-        log.info("Unregistered pipeconf: {} (fingerprint={})",
-                 pipeconfId, HexString.toHexString(pipeconf.fingerprint()));
-        post(new PiPipeconfEvent(PiPipeconfEvent.Type.UNREGISTERED, pipeconfId));
+        log.info("Removing pipeconf {}", pipeconfId);
+        pipeconfs.remove(pipeconfId);
     }
 
     @Override
@@ -166,16 +168,6 @@ public class PiPipeconfManager
     @Override
     public Optional<PiPipeconf> getPipeconf(PiPipeconfId id) {
         return Optional.ofNullable(pipeconfs.get(id));
-    }
-
-    @Override
-    public Optional<PiPipeconf> getPipeconf(DeviceId deviceId) {
-        if (pipeconfMappingStore.getPipeconfId(deviceId) == null) {
-            return Optional.empty();
-        } else {
-            return Optional.ofNullable(pipeconfs.get(
-                    pipeconfMappingStore.getPipeconfId(deviceId)));
-        }
     }
 
     @Override
@@ -231,7 +223,7 @@ public class PiPipeconfManager
             if (getDriver(newDriverName) != null) {
                 return newDriverName;
             }
-            log.debug("Creating merged driver {}...", newDriverName);
+            log.info("Creating merged driver {}...", newDriverName);
             final Driver mergedDriver = buildMergedDriver(
                     pipeconfId, baseDriverName, newDriverName);
             if (mergedDriver == null) {
@@ -299,20 +291,6 @@ public class PiPipeconfManager
                 new HashMap<>();
         pipeconf.behaviours().forEach(
                 b -> behaviours.put(b, pipeconf.implementation(b).get()));
-
-        // FIXME: remove this check when stratum_bmv2 will be open source and we
-        //  will no longer need to read port counters from the p4 program. Here
-        //  we ignore the PortStatisticsDiscovery behaviour from the pipeconf if
-        //  the base driver (e.g. stratum with gnmi) already has it. But in
-        //  general, we should give higher priority to pipeconf behaviours.
-        if (baseDriver.hasBehaviour(PortStatisticsDiscovery.class)
-                && behaviours.remove(PortStatisticsDiscovery.class) != null) {
-            log.warn("Ignoring {} behaviour from pipeconf {}, but using " +
-                             "the one provided by {} driver...",
-                     PortStatisticsDiscovery.class.getSimpleName(), pipeconfId,
-                     baseDriver.name());
-        }
-
         final Driver piPipeconfDriver = new DefaultDriver(
                 newDriverName, baseDriver.parents(),
                 baseDriver.manufacturer(), baseDriver.hwVersion(),

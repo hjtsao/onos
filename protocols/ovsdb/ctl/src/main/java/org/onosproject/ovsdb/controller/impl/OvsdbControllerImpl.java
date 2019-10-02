@@ -18,6 +18,14 @@ package org.onosproject.ovsdb.controller.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.TpPort;
@@ -55,12 +63,6 @@ import org.onosproject.ovsdb.rfc.table.OvsdbTable;
 import org.onosproject.ovsdb.rfc.table.TableGenerator;
 import org.onosproject.ovsdb.rfc.utils.FromJsonUtil;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,21 +83,17 @@ import java.util.function.Consumer;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onlab.util.Tools.get;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.SERVER_MODE;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.DEFAULT_KS_PASSWORD;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.DEFAULT_KS_FILE;
+import static org.onosproject.ovsdb.controller.OvsdbConstant.OVSDB_TLS_FLAG;
 import static org.onosproject.ovsdb.controller.impl.Controller.MIN_KS_LENGTH;
-import static org.onosproject.ovsdb.controller.impl.OsgiPropertyConstants.*;
 
 /**
  * The implementation of OvsdbController.
  */
-@Component(immediate = true, service = OvsdbController.class,
-        property = {
-                "serverMode" + ":Boolean=" + SERVER_MODE_DEFAULT,
-                "enableOvsdbTls" + ":Boolean=" + OVSDB_TLS_FLAG_DEFAULT,
-                "keyStoreLocation" + "=" + KS_FILE_DEFAULT,
-                "keyStorePassword" + "=" + KS_PASSWORD_DEFAULT,
-                "trustStoreLocation" + "=" + TS_FILE_DEFAULT,
-                "trustStorePassword" + "=" + TS_PASSWORD_DEFAULT,
-        })
+@Component(immediate = true)
+@Service
 public class OvsdbControllerImpl implements OvsdbController {
 
     public static final Logger log = LoggerFactory
@@ -112,26 +110,32 @@ public class OvsdbControllerImpl implements OvsdbController {
             new ConcurrentHashMap<>();
     protected ConcurrentHashMap<String, String> requestDbName = new ConcurrentHashMap<>();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService configService;
 
-    /** Run as server mode, listen on 6640 port. */
-    private boolean serverMode = SERVER_MODE_DEFAULT;
+    @Property(name = "serverMode", boolValue = SERVER_MODE,
+            label = "Run as server mode, listen on 6640 port")
+    private boolean serverMode = SERVER_MODE;
 
-    /** TLS mode for OVSDB channel; options are: true false. */
-    private boolean enableOvsdbTls = OVSDB_TLS_FLAG_DEFAULT;
+    @Property(name = "enableOvsdbTls", boolValue = OVSDB_TLS_FLAG,
+            label = "TLS mode for OVSDB channel; options are: true false")
+    private boolean enableOvsdbTls = OVSDB_TLS_FLAG;
 
-    /** File path to KeyStore for Ovsdb TLS Connections. */
-    protected String keyStoreLocation = KS_FILE_DEFAULT;
+    @Property(name = "keyStoreLocation", value = DEFAULT_KS_FILE,
+            label = "File path to KeyStore for Ovsdb TLS Connections")
+    protected String keyStoreLocation = DEFAULT_KS_FILE;
 
-    /** File path to TrustStore for Ovsdb TLS Connections. */
-    protected String trustStoreLocation = TS_FILE_DEFAULT;
+    @Property(name = "trustStoreLocation", value = DEFAULT_KS_FILE,
+            label = "File path to TrustStore for Ovsdb TLS Connections")
+    protected String trustStoreLocation = DEFAULT_KS_FILE;
 
-    /** KeyStore Password. */
-    protected String keyStorePassword = KS_PASSWORD_DEFAULT;
+    @Property(name = "keyStorePassword", value = DEFAULT_KS_PASSWORD,
+            label = "KeyStore Password")
+    protected String keyStorePassword = DEFAULT_KS_PASSWORD;
 
-    /** TrustStore Password. */
-    protected String trustStorePassword = TS_PASSWORD_DEFAULT;
+    @Property(name = "trustStorePassword", value = DEFAULT_KS_PASSWORD,
+            label = "TrustStore Password")
+    protected String trustStorePassword = DEFAULT_KS_PASSWORD;
 
     @Activate
     public void activate(ComponentContext context) {
@@ -179,7 +183,7 @@ public class OvsdbControllerImpl implements OvsdbController {
     private TlsParams getTlsParams(Dictionary<?, ?> properties) {
         TlsMode mode = null;
 
-        boolean flag = Tools.isPropertyEnabled(properties, OVSDB_TLS_FLAG);
+        boolean flag = Tools.isPropertyEnabled(properties, "enableOvsdbTls");
         if (Objects.isNull(flag) || !flag) {
             log.warn("OvsdbTLS Disabled");
             mode = TlsMode.DISABLED;
@@ -190,25 +194,25 @@ public class OvsdbControllerImpl implements OvsdbController {
 
         String ksLocation = null, tsLocation = null, ksPwd = null, tsPwd = null;
 
-        ksLocation = get(properties, KS_FILE);
+        ksLocation = get(properties, "keyStoreLocation");
         if (Strings.isNullOrEmpty(ksLocation)) {
             log.warn("trustStoreLocation is not configured");
             mode = TlsMode.DISABLED;
         }
 
-        tsLocation = get(properties, TS_FILE);
+        tsLocation = get(properties, "trustStoreLocation");
         if (Strings.isNullOrEmpty(tsLocation)) {
             log.warn("trustStoreLocation is not configured");
             mode = TlsMode.DISABLED;
         }
 
-        ksPwd = get(properties, KS_PASSWORD);
+        ksPwd = get(properties, "keyStorePassword");
         if (Strings.isNullOrEmpty(ksPwd) || MIN_KS_LENGTH > ksPwd.length()) {
             log.warn("keyStorePassword is not configured or Password length too small");
             mode = TlsMode.DISABLED;
         }
 
-        tsPwd = get(properties, TS_PASSWORD);
+        tsPwd = get(properties, "trustStorePassword");
         if (Strings.isNullOrEmpty(tsPwd) || MIN_KS_LENGTH > tsPwd.length()) {
             log.warn("trustStorePassword is not configured or Password length too small");
             mode = TlsMode.DISABLED;

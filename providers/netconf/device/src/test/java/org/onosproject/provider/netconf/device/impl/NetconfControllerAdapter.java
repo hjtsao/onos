@@ -75,9 +75,4 @@ public class NetconfControllerAdapter implements NetconfController {
     public NetconfDevice getNetconfDevice(IpAddress ip, int port) {
         return null;
     }
-
-    @Override
-    public NetconfDevice getNetconfDevice(IpAddress ip, int port, String path) {
-        return null;
-    }
 }

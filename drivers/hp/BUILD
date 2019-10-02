@@ -3,7 +3,6 @@ COMPILE_DEPS = CORE_DEPS + KRYO + [
     "//drivers/default:onos-drivers-default",
     "//drivers/utilities:onos-drivers-utilities",
     "//protocols/openflow/api:onos-protocols-openflow-api",
-    "//core/store/serializers:onos-core-serializers",
 ]
 
 osgi_jar_with_tests(

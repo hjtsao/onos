@@ -20,13 +20,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.Completion;
-import org.apache.karaf.shell.api.action.Option;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.commands.Option;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.cli.net.DeviceIdCompleter;
 import org.onosproject.net.DeviceId;
 import org.onosproject.netconf.NetconfController;
 import org.onosproject.netconf.NetconfDevice;
@@ -37,7 +34,6 @@ import org.onosproject.netconf.NetconfSession;
  * Command that retrieves running configuration and device state.
  * If configuration cannot be retrieved it prints an error string.
  */
-@Service
 @Command(scope = "onos", name = "netconf-get",
         description = "Retrieve running configuration and "
                 + "device state information from specified device.")
@@ -45,7 +41,6 @@ public class NetconfGetCommand extends AbstractShellCommand {
 
     @Argument(index = 0, name = "deviceId", description = "Device ID",
             required = true, multiValued = false)
-    @Completion(DeviceIdCompleter.class)
     String uri = null;
 
     @Option(name = "--timeout",
@@ -54,7 +49,7 @@ public class NetconfGetCommand extends AbstractShellCommand {
     long timeoutSec = 30;
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         DeviceId deviceId = DeviceId.deviceId(uri);
 
         NetconfController controller = get(NetconfController.class);

@@ -43,7 +43,6 @@ public interface TrafficTreatment {
     /**
      * Returns the list of treatment instructions that will be applied
      * further down the pipeline.
-     *
      * @return list of treatment instructions
      */
     List<Instruction> deferred();
@@ -51,7 +50,6 @@ public interface TrafficTreatment {
     /**
      * Returns the list of treatment instructions that will be applied
      * immediately.
-     *
      * @return list of treatment instructions
      */
     List<Instruction> immediate();
@@ -66,7 +64,6 @@ public interface TrafficTreatment {
 
     /**
      * Returns the next table in the pipeline.
-     *
      * @return a table transition; may be null.
      */
     Instructions.TableTypeTransition tableTransition();
@@ -74,7 +71,6 @@ public interface TrafficTreatment {
     /**
      * Whether the deferred treatment instructions will be cleared
      * by the device.
-     *
      * @return a boolean
      */
     boolean clearedDeferred();
@@ -88,7 +84,6 @@ public interface TrafficTreatment {
 
     /**
      * Returns the stat trigger instruction if there is one.
-     *
      * @return a stat trigger instruction; may be null.
      */
     Instructions.StatTriggerInstruction statTrigger();
@@ -321,15 +316,13 @@ public interface TrafficTreatment {
         Builder pushVlan(EthType ethType);
 
         /**
-         * Any instructions followed by this method call will be deferred.
-         *
+         * Any instructions preceded by this method call will be deferred.
          * @return a treatment builder
          */
         Builder deferred();
 
         /**
-         * Any instructions followed by this method call will be immediate.
-         *
+         * Any instructions preceded by this method call will be immediate.
          * @return a treatment builder
          */
         Builder immediate();
@@ -337,14 +330,12 @@ public interface TrafficTreatment {
 
         /**
          * Instructs the device to clear the deferred instructions set.
-         *
          * @return a treatment builder
          */
         Builder wipeDeferred();
 
         /**
          * the instruction to clear not wipe the deferred instructions set.
-         *
          * @return a treatment builder
          */
         Builder notWipeDeferred();
@@ -435,14 +426,6 @@ public interface TrafficTreatment {
          */
         @Beta
         Builder piTableAction(PiTableAction piTableAction);
-
-        /**
-         * Sets the IP DSCP field.
-         *
-         * @param dscpValue the DSCP value
-         * @return a treatment builder.
-         */
-        Builder setIpDscp(byte dscpValue);
 
         /**
          * Uses an extension treatment.

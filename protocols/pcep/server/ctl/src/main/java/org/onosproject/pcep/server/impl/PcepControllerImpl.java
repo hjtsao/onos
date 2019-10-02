@@ -16,6 +16,11 @@
 package org.onosproject.pcep.server.impl;
 
 import com.google.common.collect.Sets;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.DeviceId;
 import org.onosproject.pcep.api.PcepController;
 import org.onosproject.pcep.api.PcepDpid;
@@ -24,9 +29,6 @@ import org.onosproject.pcep.api.PcepSwitch;
 import org.onosproject.pcep.api.PcepSwitchListener;
 import org.onosproject.pcep.api.PcepTunnel;
 import org.onosproject.pcep.api.PcepTunnelListener;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +37,8 @@ import java.util.Set;
 /**
  * Implementation of PCEP controller [protocol].
  */
-@Component(immediate = true, service = PcepController.class)
+@Component(immediate = true)
+@Service
 public class PcepControllerImpl implements PcepController {
 
     private static final Logger log = LoggerFactory.getLogger(PcepControllerImpl.class);

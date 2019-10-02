@@ -38,7 +38,6 @@ import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.FlowRuleOperations;
 import org.onosproject.net.flow.FlowRuleOperationsContext;
-import org.onosproject.net.flow.IndexTableId;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.criteria.Criteria;
@@ -48,7 +47,6 @@ import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.TunnelIdCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.instructions.Instruction;
-import org.onosproject.net.flow.instructions.Instructions;
 import org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType;
@@ -66,7 +64,6 @@ import java.util.Deque;
 import java.util.List;
 
 import static org.onlab.packet.MacAddress.NONE;
-import static org.onosproject.driver.pipeline.ofdpa.OfdpaPipelineUtility.*;
 import static org.onosproject.driver.extensions.Ofdpa3MplsType.VPWS;
 import static org.onosproject.net.flow.criteria.Criterion.Type.INNER_VLAN_VID;
 import static org.onosproject.net.flow.criteria.Criterion.Type.IN_PORT;
@@ -245,18 +242,6 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
     }
 
     /**
-     *
-     * @param meta The metadata instruction of this treatment
-     * @return True if we should remove both VLAN and Mac Termination flow entries.
-     *         This is only used for double tagged hosts.
-     */
-    public boolean shouldRemoveDoubleTagged(Instruction meta) {
-
-        Instructions.MetadataInstruction metadataInstruction = (Instructions.MetadataInstruction) meta;
-        return ((metadataInstruction.metadata() & metadataInstruction.metadataMask()) == 1);
-    }
-
-    /**
      * Configure filtering rules of outer and inner VLAN IDs, and a MAC address.
      * Filtering happens in three tables (VLAN_TABLE, VLAN_1_TABLE, TMAC_TABLE).
      *
@@ -272,12 +257,6 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
         VlanIdCriterion innervidCriterion = null;
         VlanIdCriterion outerVidCriterion = null;
         boolean popVlan = false;
-        boolean removeDoubleTagged = true;
-        if (filteringObjective.meta().writeMetadata() != null) {
-            removeDoubleTagged = shouldRemoveDoubleTagged(filteringObjective.meta().writeMetadata());
-        }
-        log.info("HERE , removeDoubleTagged {}", removeDoubleTagged);
-
         TrafficTreatment meta = filteringObjective.meta();
         if (!filteringObjective.key().equals(Criteria.dummy()) &&
                 filteringObjective.key().type() == Criterion.Type.IN_PORT) {
@@ -314,10 +293,12 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
                     ethCriterion = (EthCriterion) criterion;
                     break;
                 case VLAN_VID:
-                    outerVidCriterion = (VlanIdCriterion) criterion;
-                    break;
-                case INNER_VLAN_VID:
-                    innervidCriterion = (VlanIdCriterion) criterion;
+                    if (innervidCriterion == null) {
+                        innervidCriterion = (VlanIdCriterion) criterion;
+                    } else {
+                        outerVidCriterion = innervidCriterion;
+                        innervidCriterion = (VlanIdCriterion) criterion;
+                    }
                     break;
                 default:
                     log.warn("Unsupported filter {}", criterion);
@@ -355,14 +336,7 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
                         if (matchInPortTmacTable()
                                 || (filteringObjective.meta() != null
                                 && filteringObjective.meta().clearedDeferred())) {
-
-                            // if metadata instruction not null and not removeDoubleTagged move on.
-                            if ((filteringObjective.meta().writeMetadata() != null) && (!removeDoubleTagged)) {
-                                log.info("Skipping removal of tmac rule for device {}", deviceId);
-                                continue;
-                            } else {
-                                ops = ops.remove(flowRule);
-                            }
+                            ops = ops.remove(flowRule);
                         } else {
                             log.debug("Abort TMAC flow removal on {}. Some other ports still share this TMAC flow");
                         }
@@ -377,12 +351,6 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
         for (FlowRule flowRule : rules) {
             log.trace("{} flow rule in VLAN table: {} for dev: {}",
                       (install) ? "adding" : "removing", flowRule, deviceId);
-            // if context is remove, table is vlan_1 and removeDoubleTagged is false, continue.
-            if (flowRule.table().equals(IndexTableId.of(VLAN_TABLE)) &&
-                    !removeDoubleTagged && !install) {
-                log.info("Skipping removal of vlan table rule for now!");
-                continue;
-            }
             ops = install ? ops.add(flowRule) : ops.remove(flowRule);
         }
 
@@ -475,6 +443,45 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
                 .build();
 
         return ImmutableList.of(outerRule, innerRule);
+    }
+
+    /**
+     * Determines if the filtering objective will be used for double-tagged packets.
+     *
+     * @param fob Filtering objective
+     * @return True if the objective was created for double-tagged packets, false otherwise.
+     */
+    private boolean isDoubleTagged(FilteringObjective fob) {
+        return fob.meta() != null &&
+                fob.meta().allInstructions().stream().anyMatch(inst -> inst.type() == L2MODIFICATION
+                        && ((L2ModificationInstruction) inst).subtype() == L2SubType.VLAN_POP) &&
+                fob.conditions().stream().filter(criterion -> criterion.type() == VLAN_VID).count() == 2;
+    }
+
+    /**
+     * Determines if the filtering objective will be used for a pseudowire.
+     *
+     * @param filteringObjective
+     * @return True if objective was created for a pseudowire, false otherwise.
+     */
+    private boolean isPseudowire(FilteringObjective filteringObjective) {
+
+
+        if (filteringObjective.meta() != null) {
+
+            TrafficTreatment treatment = filteringObjective.meta();
+            for (Instruction instr : treatment.immediate()) {
+                if (instr.type().equals(Instruction.Type.L2MODIFICATION)) {
+
+                    L2ModificationInstruction l2Instr = (L2ModificationInstruction) instr;
+                    if (l2Instr.subtype().equals(L2SubType.TUNNEL_ID)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -807,6 +814,52 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
     }
 
     /**
+     * Utility function to get the mod tunnel id instruction
+     * if present.
+     *
+     * @param treatment the treatment to analyze
+     * @return the mod tunnel id instruction if present,
+     * otherwise null
+     */
+    private ModTunnelIdInstruction getModTunnelIdInstruction(TrafficTreatment treatment) {
+        if (treatment == null) {
+            return null;
+        }
+
+        L2ModificationInstruction l2ModificationInstruction;
+        for (Instruction instruction : treatment.allInstructions()) {
+            if (instruction.type() == L2MODIFICATION) {
+                l2ModificationInstruction = (L2ModificationInstruction) instruction;
+                if (l2ModificationInstruction.subtype() == L2SubType.TUNNEL_ID) {
+                    return (ModTunnelIdInstruction) l2ModificationInstruction;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Utility function to get the output instruction
+     * if present.
+     *
+     * @param treatment the treatment to analyze
+     * @return the output instruction if present,
+     * otherwise null
+     */
+    private OutputInstruction getOutputInstruction(TrafficTreatment treatment) {
+        if (treatment == null) {
+            return null;
+        }
+
+        for (Instruction instruction : treatment.allInstructions()) {
+            if (instruction.type() == Instruction.Type.OUTPUT) {
+                return (OutputInstruction) instruction;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Helper method for dividing the tunnel instructions from the mpls
      * instructions.
      *
@@ -857,5 +910,4 @@ public class Ofdpa3Pipeline extends Ofdpa2Pipeline {
             }
         }
     }
-
 }

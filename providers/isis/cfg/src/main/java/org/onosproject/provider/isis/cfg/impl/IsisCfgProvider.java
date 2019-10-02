@@ -17,6 +17,12 @@
 package org.onosproject.provider.isis.cfg.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.isis.controller.IsisController;
@@ -28,11 +34,6 @@ import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import static org.slf4j.LoggerFactory.getLogger;
@@ -40,7 +41,8 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * ISIS config provider to validate and populate the configuration.
  */
-@Component(immediate = true, service = IsisCfgProvider.class)
+@Component(immediate = true)
+@Service
 public class IsisCfgProvider extends AbstractProvider {
 
     private static final String PROVIDER_ID = "org.onosproject.provider.isis.cfg";
@@ -53,13 +55,13 @@ public class IsisCfgProvider extends AbstractProvider {
                 }
             };
     private final NetworkConfigListener configListener = new InternalConfigListener();
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected IsisController isisController;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigRegistry configRegistry;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigService configService;
     private ApplicationId appId;
 

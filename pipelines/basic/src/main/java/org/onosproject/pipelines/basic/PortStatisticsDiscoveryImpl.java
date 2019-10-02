@@ -29,7 +29,6 @@ import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.pi.model.PiCounterId;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.runtime.PiCounterCell;
-import org.onosproject.net.pi.runtime.PiCounterCellHandle;
 import org.onosproject.net.pi.runtime.PiCounterCellId;
 import org.onosproject.net.pi.service.PiPipeconfService;
 import org.onosproject.p4runtime.api.P4RuntimeClient;
@@ -41,18 +40,18 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static org.onosproject.net.pi.model.PiCounterType.INDIRECT;
-import static org.onosproject.pipelines.basic.BasicConstants.EGRESS_PORT_COUNTERS_EGRESS_EGRESS_PORT_COUNTER;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_PORT_COUNTERS_INGRESS_INGRESS_PORT_COUNTER;
+import static org.onosproject.pipelines.basic.BasicConstants.CNT_EGRESS_PORT_COUNTER_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.CNT_INGRESS_PORT_COUNTER_ID;
 
 /**
  * Implementation of the PortStatisticsBehaviour for basic.p4.
  */
 public class PortStatisticsDiscoveryImpl extends AbstractHandlerBehaviour implements PortStatisticsDiscovery {
 
-    private static final long DEFAULT_P4_DEVICE_ID = 1;
     private static final Map<Pair<DeviceId, PortNumber>, Long> PORT_START_TIMES =
             Maps.newConcurrentMap();
 
@@ -64,7 +63,7 @@ public class PortStatisticsDiscoveryImpl extends AbstractHandlerBehaviour implem
      * @return counter ID
      */
     public PiCounterId ingressCounterId() {
-        return INGRESS_PORT_COUNTERS_INGRESS_INGRESS_PORT_COUNTER;
+        return CNT_INGRESS_PORT_COUNTER_ID;
     }
 
     /**
@@ -73,7 +72,7 @@ public class PortStatisticsDiscoveryImpl extends AbstractHandlerBehaviour implem
      * @return counter ID
      */
     public PiCounterId egressCounterId() {
-        return EGRESS_PORT_COUNTERS_EGRESS_EGRESS_PORT_COUNTER;
+        return CNT_EGRESS_PORT_COUNTER_ID;
     }
 
     @Override
@@ -91,7 +90,7 @@ public class PortStatisticsDiscoveryImpl extends AbstractHandlerBehaviour implem
         PiPipeconf pipeconf = piPipeconfService.getPipeconf(piPipeconfService.ofDevice(deviceId).get()).get();
 
         P4RuntimeController controller = handler().get(P4RuntimeController.class);
-        P4RuntimeClient client = controller.get(deviceId);
+        P4RuntimeClient client = controller.getClient(deviceId);
         if (client == null) {
             log.warn("Unable to find client for {}, aborting operation", deviceId);
             return Collections.emptyList();
@@ -112,15 +111,15 @@ public class PortStatisticsDiscoveryImpl extends AbstractHandlerBehaviour implem
             counterCellIds.add(PiCounterCellId.ofIndirect(ingressCounterId(), p));
             counterCellIds.add(PiCounterCellId.ofIndirect(egressCounterId(), p));
         });
-        Set<PiCounterCellHandle> counterCellHandles = counterCellIds.stream()
-                .map(id -> PiCounterCellHandle.of(deviceId, id))
-                .collect(Collectors.toSet());
 
-        // Query the device.
-        Collection<PiCounterCell> counterEntryResponse = client.read(
-                DEFAULT_P4_DEVICE_ID, pipeconf)
-                .handles(counterCellHandles).submitSync()
-                .all(PiCounterCell.class);
+        Collection<PiCounterCell> counterEntryResponse;
+        try {
+            counterEntryResponse = client.readCounterCells(counterCellIds, pipeconf).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Exception while reading port counters from {}: {}", deviceId, e.toString());
+            log.debug("", e);
+            return Collections.emptyList();
+        }
 
         counterEntryResponse.forEach(counterCell -> {
             if (counterCell.cellId().counterType() != INDIRECT) {

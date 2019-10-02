@@ -24,7 +24,6 @@ import com.google.common.collect.Sets;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.util.ItemNotFoundException;
-import org.onosproject.common.event.impl.TestEventDispatcher;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
@@ -36,7 +35,6 @@ import org.onosproject.net.config.basics.BasicDeviceConfig;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.PortDescription;
-import org.onosproject.net.device.PortStatisticsDiscovery;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.driver.Behaviour;
 import org.onosproject.net.driver.Driver;
@@ -46,6 +44,7 @@ import org.onosproject.net.driver.DriverAdminServiceAdapter;
 import org.onosproject.net.driver.DriverProvider;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.model.PiPipeconfId;
+import org.onosproject.net.pi.service.PiPipeconfConfig;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,9 +55,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.onosproject.net.NetTestTools.injectEventDispatcher;
 import static org.onosproject.pipelines.basic.PipeconfLoader.BASIC_PIPECONF;
 
 
@@ -79,99 +77,99 @@ public class PiPipeconfManagerTest {
     private final Set<NetworkConfigListener> netCfgListeners = new HashSet<>();
     private final Set<DriverProvider> providers = new HashSet<>();
 
+    private final PiPipeconfConfig piPipeconfConfig = new PiPipeconfConfig();
+    private final InputStream jsonStream = PiPipeconfManagerTest.class
+            .getResourceAsStream("/org/onosproject/net/pi/impl/piPipeconfId.json");
     private final BasicDeviceConfig basicDeviceConfig = new BasicDeviceConfig();
     private final InputStream jsonStreamBasic = PiPipeconfManagerTest.class
             .getResourceAsStream("/org/onosproject/net/pi/impl/basic.json");
 
 
     //Services
-    private PiPipeconfManager mgr;
-    private PiPipeconf pipeconf;
+    private PiPipeconfManager piPipeconfService;
+    private PiPipeconf piPipeconf;
 
     @Before
     public void setUp() throws IOException {
-        mgr = new PiPipeconfManager();
-        pipeconf = BASIC_PIPECONF;
-        mgr.cfgService = cfgService;
-        mgr.driverAdminService = driverAdminService;
-        injectEventDispatcher(mgr, new TestEventDispatcher());
+        piPipeconfService = new PiPipeconfManager();
+        piPipeconf = BASIC_PIPECONF;
+        piPipeconfService.cfgService = cfgService;
+        piPipeconfService.driverAdminService = driverAdminService;
+        String key = "piPipeconf";
         ObjectMapper mapper = new ObjectMapper();
+        JsonNode jsonNode = mapper.readTree(jsonStream);
         ConfigApplyDelegate delegate = new MockDelegate();
+        piPipeconfConfig.init(DEVICE_ID, key, jsonNode, mapper, delegate);
         String keyBasic = "basic";
         JsonNode jsonNodeBasic = mapper.readTree(jsonStreamBasic);
         basicDeviceConfig.init(DEVICE_ID, keyBasic, jsonNodeBasic, mapper, delegate);
-        mgr.activate();
+        piPipeconfService.activate();
     }
 
     @Test
     public void activate() {
-        assertEquals("Incorrect driver admin service", driverAdminService, mgr.driverAdminService);
-        assertEquals("Incorrect driverAdminService service", driverAdminService, mgr.driverAdminService);
-        assertEquals("Incorrect configuration service", cfgService, mgr.cfgService);
+        assertEquals("Incorrect driver admin service", driverAdminService, piPipeconfService.driverAdminService);
+        assertEquals("Incorrect driverAdminService service", driverAdminService, piPipeconfService.driverAdminService);
+        assertEquals("Incorrect configuration service", cfgService, piPipeconfService.cfgService);
+        assertTrue("Incorrect config factory", cfgFactories.contains(piPipeconfService.configFactory));
     }
 
     @Test
     public void deactivate() {
-        mgr.deactivate();
-        assertNull("Incorrect driver admin service", mgr.driverAdminService);
-        assertNull("Incorrect driverAdminService service", mgr.driverAdminService);
-        assertNull("Incorrect configuration service", mgr.cfgService);
+        piPipeconfService.deactivate();
+        assertEquals("Incorrect driver admin service", null, piPipeconfService.driverAdminService);
+        assertEquals("Incorrect driverAdminService service", null, piPipeconfService.driverAdminService);
+        assertEquals("Incorrect configuration service", null, piPipeconfService.cfgService);
+        assertFalse("Config factory should be unregistered", cfgFactories.contains(piPipeconfService.configFactory));
     }
 
     @Test
     public void register() {
-        mgr.register(pipeconf);
-        assertTrue("PiPipeconf should be registered", mgr.pipeconfs.containsValue(pipeconf));
+        piPipeconfService.register(piPipeconf);
+        assertTrue("PiPipeconf should be registered", piPipeconfService.pipeconfs.containsValue(piPipeconf));
     }
 
     @Test
     public void getPipeconf() {
-        mgr.register(pipeconf);
-        assertEquals("Returned PiPipeconf is not correct", pipeconf,
-                     mgr.getPipeconf(pipeconf.id()).get());
+        piPipeconfService.register(piPipeconf);
+        assertEquals("Returned PiPipeconf is not correct", piPipeconf,
+                     piPipeconfService.getPipeconf(piPipeconf.id()).get());
     }
 
 
     @Test
     public void mergeDriver() {
-        PiPipeconfId piPipeconfId = new PiPipeconfId(cfgService.getConfig(
-                DEVICE_ID, BasicDeviceConfig.class).pipeconf());
-        assertEquals(pipeconf.id(), piPipeconfId);
+        PiPipeconfId piPipeconfId = cfgService.getConfig(DEVICE_ID, PiPipeconfConfig.class).piPipeconfId();
+        assertEquals(piPipeconf.id(), piPipeconfId);
 
         String baseDriverName = cfgService.getConfig(DEVICE_ID, BasicDeviceConfig.class).driver();
         assertEquals(BASE_DRIVER, baseDriverName);
 
-        mgr.register(pipeconf);
-        assertEquals("Returned PiPipeconf is not correct", pipeconf,
-                     mgr.getPipeconf(pipeconf.id()).get());
+        piPipeconfService.register(piPipeconf);
+        assertEquals("Returned PiPipeconf is not correct", piPipeconf,
+                     piPipeconfService.getPipeconf(piPipeconf.id()).get());
 
-        String mergedDriverName = mgr.getMergedDriver(DEVICE_ID, piPipeconfId);
+        String mergedDriverName = piPipeconfService.getMergedDriver(DEVICE_ID, piPipeconfId);
 
         String expectedName = BASE_DRIVER + ":" + piPipeconfId.id();
         assertEquals(expectedName, mergedDriverName);
 
         //we assume that the provider is 1 and that it contains 1 driver
         //we also assume that everything after driverAdminService.registerProvider(provider); has been tested.
-        assertEquals("Provider should be registered", 1, providers.size());
+        assertTrue("Provider should be registered", providers.size() == 1);
 
         assertTrue("Merged driver name should be valid",
                    mergedDriverName != null && !mergedDriverName.isEmpty());
 
         DriverProvider provider = providers.iterator().next();
-        assertEquals("Provider should contain one driver", 1, provider.getDrivers().size());
+        assertTrue("Provider should contain one driver", provider.getDrivers().size() == 1);
 
         Driver driver = provider.getDrivers().iterator().next();
 
         Set<Class<? extends Behaviour>> expectedBehaviours = Sets.newHashSet();
         expectedBehaviours.addAll(BASIC_PIPECONF.behaviours());
         expectedBehaviours.addAll(baseDriver.behaviours());
-
-        // FIXME: remove when stratum_bmv2 will be open source
-        //  (see PiPipeconfManager)
-        // expectedBehaviours.remove(PortStatisticsDiscovery.class);
-
-        assertEquals("The driver contains wrong behaviours",
-                     expectedBehaviours, driver.behaviours());
+        assertEquals("The driver contains wrong behaviours", expectedBehaviours, driver.behaviours());
     }
 
     private class MockNetworkConfigRegistry extends NetworkConfigRegistryAdapter {
@@ -198,7 +196,10 @@ public class PiPipeconfManagerTest {
         @Override
         public <S, C extends Config<S>> C getConfig(S subject, Class<C> configClass) {
             DeviceId did = (DeviceId) subject;
-            if (configClass.equals(BasicDeviceConfig.class)
+            if (configClass.equals(PiPipeconfConfig.class)
+                    && did.equals(DEVICE_ID)) {
+                return (C) piPipeconfConfig;
+            } else if (configClass.equals(BasicDeviceConfig.class)
                     && did.equals(DEVICE_ID)) {
                 return (C) basicDeviceConfig;
             }
@@ -267,8 +268,7 @@ public class PiPipeconfManagerTest {
 
         @Override
         public Set<Class<? extends Behaviour>> behaviours() {
-            return ImmutableSet.of(DeviceDescriptionDiscovery.class,
-                                   PortStatisticsDiscovery.class);
+            return ImmutableSet.of(DeviceDescriptionDiscovery.class);
         }
 
         @Override

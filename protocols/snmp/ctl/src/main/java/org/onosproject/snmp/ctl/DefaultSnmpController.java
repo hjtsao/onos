@@ -23,16 +23,17 @@ import com.btisystems.pronx.ems.core.snmp.ISnmpSessionFactory;
 import com.btisystems.pronx.ems.core.snmp.SnmpSessionFactory;
 import com.btisystems.pronx.ems.core.snmp.V2cSnmpConfiguration;
 import com.google.common.base.Preconditions;
-import org.onosproject.alarm.Alarm;
-import org.onosproject.alarm.AlarmId;
-import org.onosproject.alarm.DefaultAlarm;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
+import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmId;
+import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
 import org.onosproject.net.DeviceId;
 import org.onosproject.snmp.SnmpController;
 import org.onosproject.snmp.SnmpDevice;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,7 +47,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Default implementation of the SNMP sub-controller.
  */
-@Component(immediate = true, service = SnmpController.class)
+@Component(immediate = true)
+@Service
 public class DefaultSnmpController implements SnmpController {
 
     private final Logger log = LoggerFactory

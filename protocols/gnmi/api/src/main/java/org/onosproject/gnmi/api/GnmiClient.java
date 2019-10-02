@@ -17,12 +17,12 @@
 package org.onosproject.gnmi.api;
 
 import com.google.common.annotations.Beta;
+
 import gnmi.Gnmi.CapabilityResponse;
-import gnmi.Gnmi.GetRequest;
 import gnmi.Gnmi.GetResponse;
+import gnmi.Gnmi.GetRequest;
 import gnmi.Gnmi.SetRequest;
 import gnmi.Gnmi.SetResponse;
-import gnmi.Gnmi.SubscribeRequest;
 import org.onosproject.grpc.api.GrpcClient;
 
 import java.util.concurrent.CompletableFuture;
@@ -34,14 +34,15 @@ import java.util.concurrent.CompletableFuture;
 public interface GnmiClient extends GrpcClient {
 
     /**
-     * Gets capability from a target.
+     * Gets capability from a target. This allows device driver behavior
+     * to validate the service version and models which gNMI device supported.
      *
      * @return the capability response
      */
-    CompletableFuture<CapabilityResponse> capabilities();
+    CompletableFuture<CapabilityResponse> capability();
 
     /**
-     * Retrieves a snapshot of data from the device.
+     * Retrieve a snapshot of data from the device.
      *
      * @param request the get request
      * @return the snapshot of data from the device
@@ -57,17 +58,12 @@ public interface GnmiClient extends GrpcClient {
     CompletableFuture<SetResponse> set(SetRequest request);
 
     /**
-     * Starts a subscription for the given request. Updates will be notified by
-     * the controller via {@link GnmiEvent.Type#UPDATE} events. The client
-     * guarantees that a Subscription RPC is active at all times despite channel
-     * or server failures, unless {@link #unsubscribe()} is called.
+     * Check weather the gNMI service is available or not by sending a
+     * dummy get request message.
      *
-     * @param request the subscribe request
+     * @return true if gNMI service available; false otherwise
      */
-    void subscribe(SubscribeRequest request);
+    CompletableFuture<Boolean> isServiceAvailable();
 
-    /**
-     * Terminates any Subscribe RPC active.
-     */
-    void unsubscribe();
+    // TODO: Support gNMI subscription
 }

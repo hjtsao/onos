@@ -16,6 +16,12 @@
 
 package org.onosproject.net.pi.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
@@ -23,9 +29,9 @@ import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.group.Group;
 import org.onosproject.net.meter.Meter;
 import org.onosproject.net.pi.model.PiPipeconf;
-import org.onosproject.net.pi.runtime.PiActionProfileGroup;
+import org.onosproject.net.pi.runtime.PiActionGroup;
 import org.onosproject.net.pi.runtime.PiMeterCellConfig;
-import org.onosproject.net.pi.runtime.PiPreEntry;
+import org.onosproject.net.pi.runtime.PiMulticastGroupEntry;
 import org.onosproject.net.pi.runtime.PiTableEntry;
 import org.onosproject.net.pi.service.PiFlowRuleTranslationStore;
 import org.onosproject.net.pi.service.PiFlowRuleTranslator;
@@ -33,55 +39,49 @@ import org.onosproject.net.pi.service.PiGroupTranslationStore;
 import org.onosproject.net.pi.service.PiGroupTranslator;
 import org.onosproject.net.pi.service.PiMeterTranslationStore;
 import org.onosproject.net.pi.service.PiMeterTranslator;
-import org.onosproject.net.pi.service.PiReplicationGroupTranslationStore;
-import org.onosproject.net.pi.service.PiReplicationGroupTranslator;
+import org.onosproject.net.pi.service.PiMulticastGroupTranslationStore;
+import org.onosproject.net.pi.service.PiMulticastGroupTranslator;
 import org.onosproject.net.pi.service.PiTranslationException;
 import org.onosproject.net.pi.service.PiTranslationService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Implementation of the PI translation service.
  */
-@Component(immediate = true, service = PiTranslationService.class)
+@Component(immediate = true)
+@Service
 public class PiTranslationServiceImpl implements PiTranslationService {
 
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     // TODO: implement cache to speed up translation.
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiFlowRuleTranslationStore flowRuleTranslationStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiGroupTranslationStore groupTranslationStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    private PiReplicationGroupTranslationStore repGroupTranslationStore;
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private PiMulticastGroupTranslationStore mcGroupTranslationStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiMeterTranslationStore meterTranslationStore;
 
     private PiFlowRuleTranslator flowRuleTranslator;
     private PiGroupTranslator groupTranslator;
-    private PiReplicationGroupTranslator repGroupTranslator;
+    private PiMulticastGroupTranslator mcGroupTranslator;
     private PiMeterTranslator meterTranslator;
 
     @Activate
     public void activate() {
         flowRuleTranslator = new InternalFlowRuleTranslator(flowRuleTranslationStore);
         groupTranslator = new InternalGroupTranslator(groupTranslationStore);
-        repGroupTranslator = new InternalReplicationGroupTranslator(repGroupTranslationStore);
+        mcGroupTranslator = new InternalMulticastGroupTranslator(mcGroupTranslationStore);
         meterTranslator = new InternalMeterTranslator(meterTranslationStore);
         log.info("Started");
     }
@@ -110,8 +110,8 @@ public class PiTranslationServiceImpl implements PiTranslationService {
     }
 
     @Override
-    public PiReplicationGroupTranslator replicationGroupTranslator() {
-        return repGroupTranslator;
+    public PiMulticastGroupTranslator multicastGroupTranslator() {
+        return mcGroupTranslator;
     }
 
     private Device getDevice(DeviceId deviceId) throws PiTranslationException {
@@ -133,15 +133,13 @@ public class PiTranslationServiceImpl implements PiTranslationService {
         @Override
         public PiTableEntry translate(FlowRule original, PiPipeconf pipeconf)
                 throws PiTranslationException {
-            checkNotNull(original);
-            checkNotNull(pipeconf);
             return PiFlowRuleTranslatorImpl
                     .translate(original, pipeconf, getDevice(original.deviceId()));
         }
     }
 
     private final class InternalGroupTranslator
-            extends AbstractPiTranslatorImpl<Group, PiActionProfileGroup>
+            extends AbstractPiTranslatorImpl<Group, PiActionGroup>
             implements PiGroupTranslator {
 
         private InternalGroupTranslator(PiGroupTranslationStore store) {
@@ -149,29 +147,25 @@ public class PiTranslationServiceImpl implements PiTranslationService {
         }
 
         @Override
-        public PiActionProfileGroup translate(Group original, PiPipeconf pipeconf)
+        public PiActionGroup translate(Group original, PiPipeconf pipeconf)
                 throws PiTranslationException {
-            checkNotNull(original);
-            checkNotNull(pipeconf);
             return PiGroupTranslatorImpl
                     .translate(original, pipeconf, getDevice(original.deviceId()));
         }
     }
 
-    private final class InternalReplicationGroupTranslator
-            extends AbstractPiTranslatorImpl<Group, PiPreEntry>
-            implements PiReplicationGroupTranslator {
+    private final class InternalMulticastGroupTranslator
+            extends AbstractPiTranslatorImpl<Group, PiMulticastGroupEntry>
+            implements PiMulticastGroupTranslator {
 
-        private InternalReplicationGroupTranslator(PiReplicationGroupTranslationStore store) {
+        private InternalMulticastGroupTranslator(PiMulticastGroupTranslationStore store) {
             super(store);
         }
 
         @Override
-        public PiPreEntry translate(Group original, PiPipeconf pipeconf)
+        public PiMulticastGroupEntry translate(Group original, PiPipeconf pipeconf)
                 throws PiTranslationException {
-            checkNotNull(original);
-            checkNotNull(pipeconf);
-            return PiReplicationGroupTranslatorImpl.translate(
+            return PiMulticastGroupTranslatorImpl.translate(
                     original, pipeconf, getDevice(original.deviceId()));
         }
     }
@@ -187,8 +181,6 @@ public class PiTranslationServiceImpl implements PiTranslationService {
         @Override
         public PiMeterCellConfig translate(Meter original, PiPipeconf pipeconf)
                 throws PiTranslationException {
-            checkNotNull(original);
-            checkNotNull(pipeconf);
             return PiMeterTranslatorImpl
                     .translate(original, pipeconf, getDevice(original.deviceId()));
         }

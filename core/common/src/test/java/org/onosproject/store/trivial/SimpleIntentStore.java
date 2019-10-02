@@ -17,6 +17,10 @@ package org.onosproject.store.trivial;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentData;
 import org.onosproject.net.intent.IntentEvent;
@@ -25,9 +29,6 @@ import org.onosproject.net.intent.IntentStore;
 import org.onosproject.net.intent.IntentStoreDelegate;
 import org.onosproject.net.intent.Key;
 import org.onosproject.store.AbstractStore;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -41,7 +42,8 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Simple single-instance implementation of the intent store.
  */
-@Component(immediate = true, service = IntentStore.class)
+@Component(immediate = true)
+@Service
 public class SimpleIntentStore
         extends AbstractStore<IntentEvent, IntentStoreDelegate>
         implements IntentStore {

@@ -18,7 +18,7 @@ package org.onosproject.drivers.gnmi;
 
 import org.onosproject.gnmi.api.GnmiClient;
 import org.onosproject.gnmi.api.GnmiController;
-import org.onosproject.grpc.utils.AbstractGrpcHandshaker;
+import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.device.DeviceHandshaker;
 
@@ -27,23 +27,22 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Implementation of DeviceHandshaker for gNMI.
  */
-public class GnmiHandshaker
-        extends AbstractGrpcHandshaker<GnmiClient, GnmiController>
-        implements DeviceHandshaker {
-
-
-    public GnmiHandshaker() {
-        super(GnmiController.class);
-    }
+public class GnmiHandshaker extends AbstractGnmiHandlerBehaviour implements DeviceHandshaker {
 
     @Override
-    public boolean isAvailable() {
-        return isReachable();
-    }
-
-    @Override
-    public CompletableFuture<Boolean> probeAvailability() {
-        return probeReachability();
+    public CompletableFuture<Boolean> isReachable() {
+        return CompletableFuture
+                // gNMI requires a client to be created to
+                // check for reachability.
+                .supplyAsync(super::createClient)
+                .thenApplyAsync(client -> {
+                    if (client == null) {
+                        return false;
+                    }
+                    return handler()
+                            .get(GnmiController.class)
+                            .isReachable(handler().data().deviceId());
+                });
     }
 
     @Override
@@ -54,5 +53,45 @@ public class GnmiHandshaker
     @Override
     public MastershipRole getRole() {
         throw new UnsupportedOperationException("Mastership operation not supported");
+    }
+
+    @Override
+    public CompletableFuture<Boolean> connect() {
+        return CompletableFuture
+                .supplyAsync(super::createClient)
+                .thenComposeAsync(client -> {
+                    if (client == null) {
+                        return CompletableFuture.completedFuture(false);
+                    }
+                    return CompletableFuture.completedFuture(true);
+                });
+    }
+
+    @Override
+    public boolean isConnected() {
+        final GnmiController controller = handler().get(GnmiController.class);
+        final DeviceId deviceId = handler().data().deviceId();
+        final GnmiClient client = controller.getClient(deviceId);
+
+        if (client == null) {
+            return false;
+        }
+
+        return getFutureWithDeadline(client.isServiceAvailable(), "getting availability", false);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> disconnect() {
+        final GnmiController controller = handler().get(GnmiController.class);
+        final DeviceId deviceId = handler().data().deviceId();
+        final GnmiClient client = controller.getClient(deviceId);
+        if (client == null) {
+            return CompletableFuture.completedFuture(true);
+        }
+        return client.shutdown()
+                .thenApplyAsync(v -> {
+                    controller.removeClient(deviceId);
+                    return true;
+                });
     }
 }

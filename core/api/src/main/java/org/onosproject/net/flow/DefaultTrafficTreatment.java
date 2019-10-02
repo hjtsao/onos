@@ -515,11 +515,6 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         }
 
         @Override
-        public TrafficTreatment.Builder setIpDscp(byte dscpValue) {
-            return add(Instructions.modIpDscp(dscpValue));
-        }
-
-        @Override
         public TrafficTreatment.Builder extension(ExtensionTreatment extension,
                                                   DeviceId deviceId) {
             return add(Instructions.extension(extension, deviceId));

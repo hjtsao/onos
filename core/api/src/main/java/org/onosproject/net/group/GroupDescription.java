@@ -41,12 +41,6 @@ public interface GroupDescription {
          */
         ALL,
         /**
-         * Similar to {@link Type#ALL} but used for cloning of packets
-         * independently of the egress decision (singleton treatment or other
-         * group).
-         */
-        CLONE,
-        /**
          * Uses the first live bucket in a group.
          */
         FAILOVER

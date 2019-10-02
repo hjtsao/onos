@@ -16,15 +16,17 @@
 
 package org.onosproject.store.pi.impl;
 
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.meter.Meter;
 import org.onosproject.net.pi.runtime.PiMeterCellConfig;
 import org.onosproject.net.pi.service.PiMeterTranslationStore;
-import org.osgi.service.component.annotations.Component;
 
 /**
  * Distributed implementation of a PI translation store for meters.
  */
-@Component(immediate = true, service = PiMeterTranslationStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedPiMeterTranslationStore
         extends AbstractDistributedPiTranslationStore<Meter, PiMeterCellConfig>
         implements PiMeterTranslationStore {

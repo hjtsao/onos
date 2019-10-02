@@ -17,6 +17,13 @@ package org.onosproject.store.host.impl;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
@@ -43,16 +50,11 @@ import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.DistributedPrimitive.Status;
 import org.onosproject.store.service.Versioned;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -62,6 +64,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
@@ -72,20 +75,21 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Manages the inventory of hosts using a {@code EventuallyConsistentMap}.
  */
-@Component(immediate = true, service = HostStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedHostStore
     extends AbstractStore<HostEvent, HostStoreDelegate>
     implements HostStore {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     private ConsistentMap<HostId, DefaultHost> hostsConsistentMap;
     private Map<HostId, DefaultHost> hosts;
     private Map<IpAddress, Set<Host>> hostsByIp;
-    MapEventListener<HostId, DefaultHost> hostLocationTracker =
+    private MapEventListener<HostId, DefaultHost> hostLocationTracker =
             new HostLocationTracker();
 
     private ScheduledExecutorService executor;
@@ -161,7 +165,7 @@ public class DistributedHostStore
 
         if (replaceIPs) {
             if (!Objects.equals(hostDescription.ipAddress(),
-                    existingHost.ipAddresses())) {
+                                existingHost.ipAddresses())) {
                 return true;
             }
         } else {
@@ -173,8 +177,8 @@ public class DistributedHostStore
         // check to see if any of the annotations provided by hostDescription
         // differ from those in the existing host
         return hostDescription.annotations().keys().stream()
-                .anyMatch(k -> !Objects.equals(hostDescription.annotations().value(k),
-                        existingHost.annotations().value(k)));
+                   .anyMatch(k -> !Objects.equals(hostDescription.annotations().value(k),
+                                                  existingHost.annotations().value(k)));
 
 
     }
@@ -186,37 +190,37 @@ public class DistributedHostStore
                                         HostDescription hostDescription,
                                         boolean replaceIPs) {
         hostsConsistentMap.computeIf(hostId,
-                existingHost -> shouldUpdate(existingHost, providerId,
-                        hostDescription, replaceIPs),
-                (id, existingHost) -> {
+                       existingHost -> shouldUpdate(existingHost, providerId,
+                                                    hostDescription, replaceIPs),
+                       (id, existingHost) -> {
 
-                    final Set<IpAddress> addresses;
-                    if (existingHost == null || replaceIPs) {
-                        addresses = ImmutableSet.copyOf(hostDescription.ipAddress());
-                    } else {
-                        addresses = Sets.newHashSet(existingHost.ipAddresses());
-                        addresses.addAll(hostDescription.ipAddress());
-                    }
+                           final Set<IpAddress> addresses;
+                           if (existingHost == null || replaceIPs) {
+                               addresses = ImmutableSet.copyOf(hostDescription.ipAddress());
+                           } else {
+                               addresses = Sets.newHashSet(existingHost.ipAddresses());
+                               addresses.addAll(hostDescription.ipAddress());
+                           }
 
-                    final Annotations annotations;
-                    if (existingHost != null) {
-                        annotations = merge((DefaultAnnotations) existingHost.annotations(),
-                                hostDescription.annotations());
-                    } else {
-                        annotations = hostDescription.annotations();
-                    }
+                           final Annotations annotations;
+                           if (existingHost != null) {
+                               annotations = merge((DefaultAnnotations) existingHost.annotations(),
+                                       hostDescription.annotations());
+                           } else {
+                               annotations = hostDescription.annotations();
+                           }
 
-                    return new DefaultHost(providerId,
-                            hostId,
-                            hostDescription.hwAddress(),
-                            hostDescription.vlan(),
-                            hostDescription.locations(),
-                            addresses,
-                            hostDescription.innerVlan(),
-                            hostDescription.tpid(),
-                            hostDescription.configured(),
-                            annotations);
-                });
+                           return new DefaultHost(providerId,
+                                                  hostId,
+                                                  hostDescription.hwAddress(),
+                                                  hostDescription.vlan(),
+                                                  hostDescription.locations(),
+                                                  addresses,
+                                                  hostDescription.innerVlan(),
+                                                  hostDescription.tpid(),
+                                                  hostDescription.configured(),
+                                                  annotations);
+                       });
         return null;
     }
 
@@ -276,9 +280,9 @@ public class DistributedHostStore
                         .forEach(newLocations::add);
 
                 return new DefaultHost(existingHost.providerId(),
-                        hostId, existingHost.mac(), existingHost.vlan(),
-                        newLocations, existingHost.ipAddresses(),
-                        existingHost.configured(), existingHost.annotations());
+                                hostId, existingHost.mac(), existingHost.vlan(),
+                                newLocations, existingHost.ipAddresses(),
+                                existingHost.configured(), existingHost.annotations());
             }
             return null;
         });
@@ -358,52 +362,6 @@ public class DistributedHostStore
         return ImmutableSet.copyOf(filtered);
     }
 
-    @Override
-    public void suspend(HostId hostId) {
-        hosts.compute(hostId, (id, existingHost) -> {
-            if (existingHost != null) {
-                if (!existingHost.suspended()) {
-                    return new DefaultHost(existingHost.providerId(),
-                            hostId,
-                            existingHost.mac(),
-                            existingHost.vlan(),
-                            existingHost.locations(),
-                            existingHost.ipAddresses(),
-                            existingHost.innerVlan(),
-                            existingHost.tpid(),
-                            existingHost.configured(),
-                            true,
-                            existingHost.annotations());
-                }
-
-            }
-            return null;
-        });
-    }
-
-    @Override
-    public void unsuspend(HostId hostId) {
-        hosts.compute(hostId, (id, existingHost) -> {
-            if (existingHost != null) {
-                if (existingHost.suspended()) {
-                    return new DefaultHost(existingHost.providerId(),
-                            hostId,
-                            existingHost.mac(),
-                            existingHost.vlan(),
-                            existingHost.locations(),
-                            existingHost.ipAddresses(),
-                            existingHost.innerVlan(),
-                            existingHost.tpid(),
-                            existingHost.configured(),
-                            false,
-                            existingHost.annotations());
-
-                }
-            }
-            return null;
-        });
-    }
-
     private Set<Host> filter(Collection<DefaultHost> collection, Predicate<DefaultHost> predicate) {
         return collection.stream().filter(predicate).collect(Collectors.toSet());
     }
@@ -415,15 +373,26 @@ public class DistributedHostStore
     }
 
     private Set<Host> updateHosts(Set<Host> existingHosts, Host host) {
-        existingHosts.removeIf(existingHost -> existingHost.id().equals(host.id()));
+        Iterator<Host> iterator = existingHosts.iterator();
+        while (iterator.hasNext()) {
+            Host existingHost = iterator.next();
+            if (existingHost.id().equals(host.id())) {
+                iterator.remove();
+            }
+        }
         existingHosts.add(host);
         return existingHosts;
     }
 
     private Set<Host> removeHosts(Set<Host> existingHosts, Host host) {
-
         if (existingHosts != null) {
-            existingHosts.removeIf(existingHost -> existingHost.id().equals(host.id()));
+            Iterator<Host> iterator = existingHosts.iterator();
+            while (iterator.hasNext()) {
+                Host existingHost = iterator.next();
+                if (existingHost.id().equals(host.id())) {
+                    iterator.remove();
+                }
+            }
         }
 
         if (existingHosts == null || existingHosts.isEmpty()) {
@@ -432,19 +401,17 @@ public class DistributedHostStore
         return existingHosts;
     }
 
-    private void updateHostsByIp(DefaultHost host, DefaultHost prevHost) {
-        // Let's update first the current ips
-        host.ipAddresses().forEach(
-                ip -> hostsByIp.compute(ip, (k, v) -> v == null ? addHosts(host) : updateHosts(v, host)));
-
-        // Let's remove then each old ip
-        Set<IpAddress> oldIps = prevHost != null ? prevHost.ipAddresses() : Collections.emptySet();
-        Sets.difference(oldIps, host.ipAddresses()).forEach(
-                ip -> hostsByIp.computeIfPresent(ip, (k, v) -> removeHosts(v, host)));
+    private void updateHostsByIp(DefaultHost host) {
+        host.ipAddresses().forEach(ip -> {
+            hostsByIp.compute(ip, (k, v) -> v == null ? addHosts(host)
+                    : updateHosts(v, host));
+        });
     }
 
     private void removeHostsByIp(DefaultHost host) {
-        host.ipAddresses().forEach(ip -> hostsByIp.computeIfPresent(ip, (k, v) -> removeHosts(v, host)));
+        host.ipAddresses().forEach(ip -> {
+            hostsByIp.computeIfPresent(ip, (k, v) -> removeHosts(v, host));
+        });
     }
 
     private void removeIpFromHostsByIp(DefaultHost host, IpAddress ip) {
@@ -454,28 +421,25 @@ public class DistributedHostStore
     private class HostLocationTracker implements MapEventListener<HostId, DefaultHost> {
         @Override
         public void event(MapEvent<HostId, DefaultHost> event) {
-            DefaultHost host = Versioned.valueOrNull(event.newValue());
-            DefaultHost prevHost = Versioned.valueOrNull(event.oldValue());
+            Versioned<DefaultHost> value = event.type() == MapEvent.Type.REMOVE ? event.oldValue() : event.newValue();
+            DefaultHost host = checkNotNull(value.value());
             switch (event.type()) {
                 case INSERT:
-                    updateHostsByIp(host, prevHost);
+                    updateHostsByIp(host);
                     notifyDelegate(new HostEvent(HOST_ADDED, host));
                     break;
                 case UPDATE:
-                    updateHostsByIp(host, prevHost);
-                    if (host.suspended() && !prevHost.suspended()) {
-                        notifyDelegate(new HostEvent(HOST_SUSPENDED, host, prevHost));
-                    } else if (!host.suspended() && prevHost.suspended()) {
-                        notifyDelegate(new HostEvent(HOST_UNSUSPENDED, host, prevHost));
-                    } else if (!Objects.equals(prevHost.locations(), host.locations())) {
+                    updateHostsByIp(host);
+                    DefaultHost prevHost = checkNotNull(event.oldValue().value());
+                    if (!Objects.equals(prevHost.locations(), host.locations())) {
                         notifyDelegate(new HostEvent(HOST_MOVED, host, prevHost));
                     } else if (!Objects.equals(prevHost, host)) {
                         notifyDelegate(new HostEvent(HOST_UPDATED, host, prevHost));
                     }
                     break;
                 case REMOVE:
-                    removeHostsByIp(prevHost);
-                    notifyDelegate(new HostEvent(HOST_REMOVED, prevHost));
+                    removeHostsByIp(host);
+                    notifyDelegate(new HostEvent(HOST_REMOVED, host));
                     break;
                 default:
                     log.warn("Unknown map event type: {}", event.type());

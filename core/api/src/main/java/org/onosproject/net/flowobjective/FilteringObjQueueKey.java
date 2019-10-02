@@ -24,7 +24,7 @@ import java.util.Objects;
 /**
  * Filtering objective queue key.
  */
-public class FilteringObjQueueKey implements ObjectiveQueueKey {
+public class FilteringObjQueueKey {
     private DeviceId deviceId;
     private int priority;
     private Criterion key;

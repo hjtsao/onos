@@ -31,16 +31,14 @@ import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.configuration.tree.xpath.XPathExpressionEngine;
-import org.onlab.packet.ChassisId;
 import org.onosproject.net.DefaultAnnotations;
-import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port.Type;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DefaultPortDescription.Builder;
 import org.onosproject.net.device.DeviceDescription;
+import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.netconf.NetconfController;
@@ -57,15 +55,15 @@ import static org.slf4j.LoggerFactory.getLogger;
  */
 public class InfineraOpenConfigDeviceDiscovery
         extends AbstractHandlerBehaviour
-        implements OdtnDeviceDescriptionDiscovery {
+        implements OdtnDeviceDescriptionDiscovery, DeviceDescriptionDiscovery {
 
     private static final Logger log = getLogger(InfineraOpenConfigDeviceDiscovery.class);
 
     @Override
     public DeviceDescription discoverDeviceDetails() {
-        return new DefaultDeviceDescription(handler().data().deviceId().uri(),
-                Device.Type.TERMINAL_DEVICE, "Infinera", "XT-3300",
-                "unknown", "unknown", new ChassisId());
+        // TODO Auto-generated method stub
+        // Not really used right now
+        return null;
     }
 
     @Override

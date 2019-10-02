@@ -66,9 +66,7 @@ import static org.onlab.util.Tools.groupedThreads;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class InOrderFlowObjectiveManagerTest {
     private InOrderFlowObjectiveManager mgr;
@@ -98,7 +96,6 @@ public class InOrderFlowObjectiveManagerTest {
     // Delay flow objectives OFFSET + rand(0, BOUND) millis
     private static final int DEFAULT_OFFSET = 10; // ms
     private static final int DEFAULT_BOUND = 40; // ms
-    private static final int TIMEOUT_THRESH = 500; // ms
     private static int offset = DEFAULT_OFFSET;
     private static int bound = DEFAULT_BOUND;
 
@@ -133,6 +130,16 @@ public class InOrderFlowObjectiveManagerTest {
     private static final ForwardingObjective FWD6 = buildFwdObjective(S2, NID1).remove();
     private List<ForwardingObjective> expectFwdObjs = Lists.newCopyOnWriteArrayList(
             Lists.newArrayList(FWD1, FWD2, FWD3, FWD4, FWD5, FWD6));
+
+    private static boolean timeout = false;
+    private static final ForwardingObjective FWD11 = buildFwdObjective(S1, NID2).add(new ObjectiveContext() {
+        @Override
+        public void onError(Objective objective, ObjectiveError error) {
+            timeout = error.equals(ObjectiveError.INSTALLATIONTIMEOUT);
+        }
+    });
+    private List<ForwardingObjective> expectFwdObjsTimeout = Lists.newCopyOnWriteArrayList(
+            Lists.newArrayList(FWD11, FWD1, FWD2));
 
     private List<Objective> actualObjs = Lists.newCopyOnWriteArrayList();
 
@@ -186,21 +193,17 @@ public class InOrderFlowObjectiveManagerTest {
 
     @Before
     public void setUp() {
-        internalSetup(InOrderFlowObjectiveManager.DEFAULT_OBJ_TIMEOUT);
-    }
-
-    private void internalSetup(int objTimeoutMs) {
         mgr = new InOrderFlowObjectiveManager();
-        mgr.objTimeoutMs = objTimeoutMs;
         mgr.pipeliners.put(DEV1, pipeliner);
         mgr.executorService = newFixedThreadPool(4, groupedThreads("foo", "bar"));
         mgr.cfgService = createMock(ComponentConfigService.class);
         mgr.deviceService = createMock(DeviceService.class);
         mgr.driverService = createMock(DriverService.class);
         mgr.flowObjectiveStore = createMock(FlowObjectiveStore.class);
-        mgr.activate(null);
+        mgr.activate();
 
         reset(mgr.flowObjectiveStore);
+        timeout = false;
         offset = DEFAULT_OFFSET;
         bound = DEFAULT_BOUND;
         actualObjs.clear();
@@ -243,27 +246,12 @@ public class InOrderFlowObjectiveManagerTest {
 
     @Test
     public void forwardTimeout() {
-        final AtomicInteger counter = new AtomicInteger(0);
-        ForwardingObjective fwdTimeout = buildFwdObjective(S1, NID2).add(new ObjectiveContext() {
-            @Override
-            public void onError(Objective objective, ObjectiveError error) {
-                if (Objects.equals(ObjectiveError.INSTALLATIONTIMEOUT, error)) {
-                    counter.incrementAndGet();
-                }
-            }
-        });
-        List<ForwardingObjective> expectFwdObjsTimeout = Lists.newCopyOnWriteArrayList(
-                Lists.newArrayList(fwdTimeout, FWD1, FWD2));
-
-        // Reduce timeout so the unit test doesn't have to wait many seconds
-        internalSetup(TIMEOUT_THRESH);
-
-        expect(mgr.flowObjectiveStore.getNextGroup(NID1)).andReturn(NGRP1).times(1);
+        expect(mgr.flowObjectiveStore.getNextGroup(NID1)).andReturn(NGRP1).times(2);
         expect(mgr.flowObjectiveStore.getNextGroup(NID2)).andReturn(NGRP2).times(2);
         replay(mgr.flowObjectiveStore);
 
         // Force this objective to time out
-        offset = mgr.objTimeoutMs * 3;
+        offset = InOrderFlowObjectiveManager.OBJ_TIMEOUT_MS + 500;
 
         expectFwdObjsTimeout.forEach(fwdObj -> mgr.forward(DEV1, fwdObj));
 
@@ -271,8 +259,8 @@ public class InOrderFlowObjectiveManagerTest {
         int expectedTime = (bound + offset) * 3;
         assertAfter(expectedTime, expectedTime * 5, () -> assertEquals(expectFwdObjsTimeout.size(), actualObjs.size()));
 
-        assertAfter(expectedTime, expectedTime * 5, () -> assertTrue(counter.get() != 0));
-        assertTrue(actualObjs.indexOf(fwdTimeout) < actualObjs.indexOf(FWD1));
+        assertTrue(timeout);
+        assertTrue(actualObjs.indexOf(FWD11) < actualObjs.indexOf(FWD1));
 
         verify(mgr.flowObjectiveStore);
     }

@@ -25,7 +25,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.PropertyResourceBundle;
 import java.util.ResourceBundle;
@@ -103,7 +102,7 @@ public final class LionUtils {
         // TODO: Review- do we need to store the system default anywhere?
 
         // Useful to log the "user.*" properties for debugging...
-        Set<String> pn = new HashSet<>(System.getProperties().stringPropertyNames());
+        Set<String> pn = System.getProperties().stringPropertyNames();
         pn.removeIf(f -> !(f.startsWith("user.")));
         for (String ukey : pn) {
             log.debug("  {}: {}", ukey, System.getProperty(ukey));

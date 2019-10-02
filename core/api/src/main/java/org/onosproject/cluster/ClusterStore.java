@@ -15,11 +15,13 @@
  */
 package org.onosproject.cluster;
 
+import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
 import org.onosproject.core.Version;
 import org.onosproject.store.Store;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -85,7 +87,28 @@ public interface ClusterStore extends Store<ClusterEvent, ClusterStoreDelegate> 
      * @param nodeId controller node identifier
      * @return system time when the availability state was last updated.
      */
-    Instant getLastUpdatedInstant(NodeId nodeId);
+    default Instant getLastUpdatedInstant(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdated(nodeId))
+                    .map(DateTime::getMillis)
+                    .map(Instant::ofEpochMilli)
+                    .orElse(null);
+    }
+
+    /**
+     * Returns the system when the availability state was last updated.
+     *
+     * @param nodeId controller node identifier
+     * @return system time when the availability state was last updated.
+     *
+     * @deprecated in 1.12.0
+     */
+    @Deprecated
+    default DateTime getLastUpdated(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdatedInstant(nodeId))
+                .map(Instant::toEpochMilli)
+                .map(DateTime::new)
+                .orElse(null);
+    }
 
     /**
      * Adds a new controller node to the cluster.

@@ -13,34 +13,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.onosproject.gnmi.ctl;
+package protocols.gnmi.ctl.java.org.onosproject.gnmi.ctl;
 
 import io.grpc.ManagedChannel;
-import org.onosproject.gnmi.api.GnmiClient;
-import org.onosproject.gnmi.api.GnmiController;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.gnmi.api.GnmiEvent;
 import org.onosproject.gnmi.api.GnmiEventListener;
 import org.onosproject.grpc.ctl.AbstractGrpcClientController;
-import org.onosproject.net.DeviceId;
-import org.osgi.service.component.annotations.Component;
+import org.onosproject.gnmi.api.GnmiClient;
+import org.onosproject.gnmi.api.GnmiClientKey;
+import org.onosproject.gnmi.api.GnmiController;
+import org.slf4j.Logger;
+
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Implementation of gNMI controller.
  */
-@Component(immediate = true, service = GnmiController.class)
+@Component(immediate = true)
+@Service
 public class GnmiControllerImpl
-        extends AbstractGrpcClientController
-        <GnmiClient, GnmiEvent, GnmiEventListener>
+        extends AbstractGrpcClientController<GnmiClientKey, GnmiClient, GnmiEvent, GnmiEventListener>
         implements GnmiController {
+    private final Logger log = getLogger(getClass());
 
-    public GnmiControllerImpl() {
-        super(GnmiEvent.class, "gNMI");
+    @Activate
+    public void activate() {
+        super.activate();
+        log.info("Started");
+    }
+
+    @Deactivate
+    public void deactivate() {
+        super.deactivate();
+        log.info("Stopped");
     }
 
     @Override
-    protected GnmiClient createClientInstance(
-            DeviceId deviceId, ManagedChannel channel) {
-        return new GnmiClientImpl(deviceId, channel, this);
+    protected GnmiClient createClientInstance(GnmiClientKey clientKey, ManagedChannel channel) {
+        return new GnmiClientImpl(clientKey, channel);
     }
 }

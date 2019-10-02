@@ -24,7 +24,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import org.onlab.packet.IpAddress;
@@ -233,6 +232,14 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         return rowStore;
     }
 
+    /**
+     * Gets the ovsdb row.
+     *
+     * @param dbName    the ovsdb database name
+     * @param tableName the ovsdb table name
+     * @param uuid      the key of the row
+     * @return row, empty if row is find
+     */
     @Override
     public Row getRow(String dbName, String tableName, String uuid) {
         OvsdbTableStore tableStore = getTableStore(dbName);
@@ -275,6 +282,12 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         ovsdbStore.createOrUpdateOvsdbStore(dbName, tableStore);
     }
 
+    /**
+     * Gets the Mirror uuid.
+     *
+     * @param mirrorName mirror name
+     * @return mirror uuid, empty if no uuid is found
+     */
     @Override
     public String getMirrorUuid(String mirrorName) {
         DatabaseSchema dbSchema = schema.get(DATABASENAME);
@@ -302,6 +315,12 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         return null;
     }
 
+    /**
+     * Gets mirrors of the device.
+     *
+     * @param deviceId target device id
+     * @return set of mirroring; empty if no mirror is found
+     */
     @Override
     public Set<MirroringStatistics> getMirroringStatistics(DeviceId deviceId) {
         Uuid bridgeUuid = getBridgeUuid(deviceId);
@@ -555,6 +574,8 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
             return;
         }
 
+        removeControllers.forEach(c -> deleteConfig(CONTROLLER, UUID, c.getRow().uuid().value(),
+                                                    BRIDGE, BRIDGE_CONTROLLER, c.getRow().uuid()));
         newControllers.stream().map(c -> {
             Controller controller = (Controller) TableGenerator
                     .createTable(dbSchema, OvsdbTable.CONTROLLER);
@@ -564,20 +585,6 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
                                     bridgeUuid.value(),
                                     c.getRow()));
 
-        // Controller removal is extremely dangerous operation, because with
-        // empty controller list, all existing flow rules will be wiped out.
-        // To harden the setController operation, we need to double check whether
-        // the updated controller list size is bigger than the remove controller list size
-        List<Controller> updatedControllers = getControllers(bridgeUuid);
-        if (updatedControllers != null && updatedControllers.size() > removeControllers.size()) {
-            removeControllers.forEach(c ->
-                    deleteConfig(CONTROLLER, UUID, c.getRow().uuid().value(),
-                    BRIDGE, BRIDGE_CONTROLLER, c.getRow().uuid()));
-        } else {
-            log.warn("New controllers were not properly configured to OVS " +
-                    "bridge {} or failed to retrieve controller list from OVS " +
-                    "bridge {}", bridgeUuid, bridgeUuid);
-        }
     }
 
     @Override
@@ -943,7 +950,15 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
                 .collect(Collectors.toSet());
         return ovsdbqueues;
     }
-
+    /**
+     * Creates a mirror port. Mirrors the traffic
+     * that goes to selectDstPort or comes from
+     * selectSrcPort or packets containing selectVlan
+     * to mirrorPort or to all ports that trunk mirrorVlan.
+     *
+     * @param mirror the OVSDB mirror description
+     * @return true if mirror creation is successful, false otherwise
+     */
     @Override
     public boolean createMirror(String bridgeName, OvsdbMirror mirror) {
 
@@ -1055,6 +1070,11 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         return true;
     }
 
+    /**
+     * Drops the configuration for mirror.
+     *
+     * @param mirroringName name of mirror to drop
+     */
     @Override
     public void dropMirror(MirroringName mirroringName) {
         String mirrorUuid = getMirrorUuid(mirroringName.name());
@@ -1076,6 +1096,7 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
 
         if (getPortUuid(ovsdbIface.name(), bridgeUuid) != null) {
             log.warn("Interface {} already exists", ovsdbIface.name());
+            // remove existing one and re-create?
             return false;
         }
 
@@ -1096,12 +1117,11 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         List<Mutation> mutations = Lists.newArrayList(mutation);
         operations.add(new Mutate(dbSchema.getTableSchema(BRIDGE), conditions, mutations));
 
+        // insert an interface
         Interface intf = (Interface) TableGenerator.createTable(dbSchema, OvsdbTable.INTERFACE);
         intf.setName(ovsdbIface.name());
 
-        if (ovsdbIface.type() != null) {
-            intf.setType(ovsdbIface.typeToString());
-        }
+        intf.setType(ovsdbIface.typeToString());
 
         if (ovsdbIface.mtu().isPresent()) {
             Set<Long> mtuSet = Sets.newConcurrentHashSet();
@@ -1111,13 +1131,6 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         }
 
         intf.setOptions(ovsdbIface.options());
-
-        ovsdbIface.data().forEach((k, v) -> {
-            if (k == Interface.InterfaceColumn.EXTERNALIDS) {
-                intf.setExternalIds(v);
-            }
-        });
-
         Insert intfInsert = new Insert(dbSchema.getTableSchema(INTERFACE), INTERFACE, intf.getRow());
         operations.add(intfInsert);
 
@@ -1332,7 +1345,7 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
 
             ListenableFuture<JsonNode> input = getSchema(dbNames);
             if (input != null) {
-                return futureTransform(input, rowFunction);
+                return Futures.transform(input, rowFunction);
             }
             return null;
         } else {
@@ -1356,7 +1369,7 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
                 }
                 return updates;
             };
-            return futureTransform(monitor(dbSchema, id), rowFunction);
+            return Futures.transform(monitor(dbSchema, id), rowFunction);
         }
         return null;
     }
@@ -1382,7 +1395,7 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
                 }
                 return null;
             });
-            return futureTransform(transact(dbSchema, operations), rowFunction);
+            return Futures.transform(transact(dbSchema, operations), rowFunction);
         }
         return null;
     }
@@ -1907,6 +1920,13 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
                 .findFirst().orElse(null);
     }
 
+    /**
+     * Get first row of given table from given db.
+     *
+     * @param dbName  db name
+     * @param tblName table name
+     * @return firstRow, first row of the given table from given db if present
+     */
     @Override
     public Optional<Object> getFirstRow(String dbName, OvsdbTable tblName) {
 
@@ -1941,22 +1961,24 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
     }
 
 
+    /**
+     * Get memory usage of device.
+     *
+     * @return memoryStats, empty data as there is no generic way to fetch such stats
+     */
     @Override
     public Optional<DeviceMemoryStats> getDeviceMemoryUsage() {
         return Optional.empty();
     }
 
 
+    /**
+     * Get cpu usage of device.
+     *
+     * @return cpuStats, empty data as there is no generic way to fetch such stats
+     */
     @Override
     public Optional<DeviceCpuStats> getDeviceCpuUsage() {
         return Optional.empty();
-    }
-
-    private <I, O> ListenableFuture<O> futureTransform(
-            ListenableFuture<I> input, Function<? super I, ? extends O> function) {
-        // Wrapper around deprecated Futures.transform() method. As per Guava
-        // recommendation, passing MoreExecutors.directExecutor() for identical
-        // behavior.
-        return Futures.transform(input, function, MoreExecutors.directExecutor());
     }
 }

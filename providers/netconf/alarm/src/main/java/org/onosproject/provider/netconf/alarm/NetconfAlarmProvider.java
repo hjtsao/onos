@@ -18,18 +18,17 @@ package org.onosproject.provider.netconf.alarm;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import org.onosproject.netconf.NetconfException;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
-import org.onosproject.alarm.Alarm;
-import org.onosproject.alarm.AlarmProvider;
-import org.onosproject.alarm.AlarmProviderService;
-import org.onosproject.alarm.AlarmProviderRegistry;
-import org.onosproject.alarm.AlarmTranslator;
-import org.onosproject.alarm.DeviceAlarmConfig;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProvider;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProviderService;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProviderRegistry;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmTranslator;
+import org.onosproject.incubator.net.faultmanagement.alarm.DeviceAlarmConfig;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
@@ -62,23 +61,23 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Provider which uses an Alarm Manager to keep track of device notifications.
  */
-@Component(immediate = true, service = AlarmProvider.class)
+@Component(immediate = true)
 public class NetconfAlarmProvider extends AbstractProvider implements AlarmProvider {
 
     public static final String ACTIVE = "active";
     private final Logger log = getLogger(getClass());
     private final AlarmTranslator translator = new NetconfAlarmTranslator();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected AlarmProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetconfController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverService driverService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
     protected AlarmProviderService providerService;
@@ -96,16 +95,10 @@ public class NetconfAlarmProvider extends AbstractProvider implements AlarmProvi
         providerService = providerRegistry.register(this);
         controller.getNetconfDevices().forEach(id -> {
             NetconfDevice device = controller.getNetconfDevice(id);
-            if (device.isMasterSession()) {
-                NetconfSession session = device.getSession();
-                InternalNotificationListener listener = new InternalNotificationListener(device.getDeviceInfo());
-                try {
-                    session.addDeviceOutputListener(listener);
-                } catch (NetconfException e) {
-                    log.error("addDeviceOutputListener Error {} ", e.getMessage());
-                }
-                idNotificationListenerMap.put(id, listener);
-            }
+            NetconfSession session = device.getSession();
+            InternalNotificationListener listener = new InternalNotificationListener(device.getDeviceInfo());
+            session.addDeviceOutputListener(listener);
+            idNotificationListenerMap.put(id, listener);
         });
         controller.addDeviceListener(deviceListener);
         log.info("NetconfAlarmProvider Started");
@@ -115,14 +108,9 @@ public class NetconfAlarmProvider extends AbstractProvider implements AlarmProvi
     public void deactivate() {
         providerRegistry.unregister(this);
         idNotificationListenerMap.forEach((id, listener) -> {
-            NetconfDevice device = controller.getNetconfDevice(id);
-            if (device.isMasterSession()) {
-                try {
-                    device.getSession().removeDeviceOutputListener(listener);
-                } catch (NetconfException e) {
-                    log.error("RemoveDeviceOutputListener Error {}", e.getMessage());
-                }
-            }
+            controller.getNetconfDevice(id)
+                    .getSession()
+                    .removeDeviceOutputListener(listener);
         });
         controller.removeDeviceListener(deviceListener);
         providerService = null;
@@ -173,15 +161,11 @@ public class NetconfAlarmProvider extends AbstractProvider implements AlarmProvi
 
         @Override
         public void deviceAdded(DeviceId deviceId) {
-            try {
-                NetconfDevice device = controller.getNetconfDevice(deviceId);
-                NetconfSession session = device.getSession();
-                InternalNotificationListener listener = new InternalNotificationListener(device.getDeviceInfo());
-                session.addDeviceOutputListener(listener);
-                idNotificationListenerMap.put(deviceId, listener);
-            } catch (NetconfException e) {
-                log.error("Device add fail {}", e.getMessage());
-            }
+            NetconfDevice device = controller.getNetconfDevice(deviceId);
+            NetconfSession session = device.getSession();
+            InternalNotificationListener listener = new InternalNotificationListener(device.getDeviceInfo());
+            session.addDeviceOutputListener(listener);
+            idNotificationListenerMap.put(deviceId, listener);
         }
 
         @Override

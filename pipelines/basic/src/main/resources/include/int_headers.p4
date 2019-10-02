@@ -21,6 +21,7 @@
 #ifndef __INT_HEADERS__
 #define __INT_HEADERS__
 #include "telemetry_report_headers.p4"
+#include "int_definitions.p4"
 
 // INT version 1.0
 
@@ -108,6 +109,7 @@ struct headers_t {
     local_report_t report_local;
     // Original packet's headers
     ethernet_t ethernet;
+    vlan_t vlan;
     ipv4_t ipv4;
     tcp_t tcp;
     udp_t udp;
@@ -129,6 +131,8 @@ struct local_metadata_t {
     bit<16>       l4_src_port;
     bit<16>       l4_dst_port;
     next_hop_id_t next_hop_id;
+    role_id_t            role_id;
+    user_pipeline_id_t   user_pipeline_id;
     bit<16>       selector;
     int_metadata_t int_meta;
     bool compute_checksum;

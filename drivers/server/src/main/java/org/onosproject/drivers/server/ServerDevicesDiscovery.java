@@ -66,6 +66,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.ImmutableList;
 
+import javax.ws.rs.ProcessingException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -79,7 +80,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import javax.ws.rs.ProcessingException;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -293,9 +293,6 @@ public class ServerDevicesDiscovery extends BasicServerDriver
         JsonNode nicNode = objNode.path(PARAM_NICS);
 
         DefaultAnnotations.Builder annotations = DefaultAnnotations.builder();
-
-        // Pass the southbound protocol as an annotation
-        annotations.set(AnnotationKeys.PROTOCOL, "REST");
 
         // Construct NIC objects
         for (JsonNode nn : nicNode) {
@@ -784,14 +781,14 @@ public class ServerDevicesDiscovery extends BasicServerDriver
             int cpuId = cpuObjNode.path(CPU_PARAM_ID).asInt();
             float cpuLoad = cpuObjNode.path(CPU_PARAM_LOAD).floatValue();
             int queueId = cpuObjNode.path(CPU_PARAM_QUEUE).asInt();
-            int busySince = cpuObjNode.path(CPU_PARAM_STATUS).asInt();
+            boolean isBusy = cpuObjNode.path(CPU_PARAM_STATUS).booleanValue();
 
             // This is mandatory information
             cpuBuilder.setDeviceId(deviceId)
                     .setId(cpuId)
                     .setLoad(cpuLoad)
                     .setQueue(queueId)
-                    .setBusySince(busySince);
+                    .setIsBusy(isBusy);
 
             // We have all the statistics for this CPU core
             cpuStats.add(cpuBuilder.build());
@@ -851,7 +848,7 @@ public class ServerDevicesDiscovery extends BasicServerDriver
             DefaultPortStatistics.Builder nicBuilder = DefaultPortStatistics.builder();
 
             nicBuilder.setDeviceId(deviceId)
-                    .setPort(PortNumber.portNumber(portNumber))
+                    .setPort((int) portNumber)
                     .setPacketsReceived(rxCount)
                     .setPacketsSent(txCount)
                     .setBytesReceived(rxBytes)

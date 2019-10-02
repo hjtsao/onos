@@ -17,6 +17,12 @@ package org.onosproject.isis.controller.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.isis.controller.IsisController;
 import org.onosproject.isis.controller.IsisProcess;
 import org.onosproject.isis.controller.topology.IsisAgent;
@@ -25,11 +31,6 @@ import org.onosproject.isis.controller.topology.IsisLinkListener;
 import org.onosproject.isis.controller.topology.IsisRouter;
 import org.onosproject.isis.controller.topology.IsisRouterListener;
 import org.onosproject.net.driver.DriverService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,12 +41,13 @@ import java.util.Set;
 /**
  * Represents ISIS controller implementation.
  */
-@Component(immediate = true, service = IsisController.class)
+@Component(immediate = true)
+@Service
 public class DefaultIsisController implements IsisController {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultIsisController.class);
     private final Controller controller = new Controller();
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverService driverService;
     protected Set<IsisRouterListener> isisRouterListener = new HashSet<>();
     protected Set<IsisLinkListener> isisLinkListener = Sets.newHashSet();

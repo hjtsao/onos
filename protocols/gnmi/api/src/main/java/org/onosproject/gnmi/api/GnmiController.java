@@ -17,7 +17,6 @@
 package org.onosproject.gnmi.api;
 
 import com.google.common.annotations.Beta;
-import org.onosproject.event.ListenerService;
 import org.onosproject.grpc.api.GrpcClientController;
 
 /**
@@ -25,6 +24,5 @@ import org.onosproject.grpc.api.GrpcClientController;
  */
 @Beta
 public interface GnmiController
-        extends GrpcClientController<GnmiClient>,
-        ListenerService<GnmiEvent, GnmiEventListener> {
+        extends GrpcClientController<GnmiClientKey, GnmiClient> {
 }

@@ -36,14 +36,14 @@ header packet_out_header_t {
 header ethernet_t {
     mac_addr_t dst_addr;
     mac_addr_t src_addr;
-    bit<16> eth_type;
+    bit<16> ether_type;
 }
 
 header vlan_tag_t {
     bit<3> pri;
     bit<1> cfi;
     vlan_id_t vlan_id;
-    bit<16> eth_type;
+    bit<16> ether_type;
 }
 
 header mpls_t {
@@ -51,15 +51,6 @@ header mpls_t {
     bit<3> tc;
     bit<1> bos;
     bit<8> ttl;
-}
-
-header pppoe_t {
-    bit<4>  version;
-    bit<4>  type_id;
-    bit<8>  code;
-    bit<16> session_id;
-    bit<16> length;
-    bit<16> protocol;
 }
 
 header ipv4_t {
@@ -89,9 +80,17 @@ header ipv6_t {
     bit<128> dst_addr;
 }
 
+header arp_t {
+    bit<16> hw_type;
+    bit<16> proto_type;
+    bit<8> hw_addr_len;
+    bit<8> proto_addr_len;
+    bit<16> opcode;
+}
+
 header tcp_t {
-    bit<16> sport;
-    bit<16> dport;
+    bit<16> src_port;
+    bit<16> dst_port;
     bit<32> seq_no;
     bit<32> ack_no;
     bit<4>  data_offset;
@@ -104,8 +103,8 @@ header tcp_t {
 }
 
 header udp_t {
-    bit<16> sport;
-    bit<16> dport;
+    bit<16> src_port;
+    bit<16> dst_port;
     bit<16> len;
     bit<16> checksum;
 }
@@ -140,8 +139,8 @@ struct spgw_meta_t {
     bit<32>           s1u_enb_addr;
     bit<32>           s1u_sgw_addr;
 #ifdef WITH_SPGW_PCC_GATING
-    bit<16>           l4_sport;
-    bit<16>           l4_dport;
+    bit<16>           l4_src_port;
+    bit<16>           l4_dst_port;
     pcc_gate_status_t pcc_gate_status;
     sdf_rule_id_t     sdf_rule_id;
     pcc_rule_id_t     pcc_rule_id;
@@ -149,54 +148,20 @@ struct spgw_meta_t {
 }
 #endif // WITH_SPGW
 
-#ifdef WITH_BNG
-
-typedef bit<2> bng_type_t;
-const bng_type_t BNG_TYPE_INVALID = 2w0x0;
-const bng_type_t BNG_TYPE_UPSTREAM = 2w0x1;
-const bng_type_t BNG_TYPE_DOWNSTREAM = 2w0x2;;
-
-struct bng_meta_t {
-    bit<2>  type; // upstream or downstream
-    bit<32> line_id; // subscriber line
-    bit<16> pppoe_session_id;
-    bit<32> ds_meter_result; // for downstream metering
-}
-#endif // WITH_BNG
-
 //Custom metadata definition
 struct fabric_metadata_t {
-    bit<16>       last_eth_type;
-    _BOOL         is_ipv4;
-    _BOOL         is_ipv6;
-    _BOOL         is_mpls;
-    bit<16>       ip_eth_type;
-    vlan_id_t     vlan_id;
-    bit<3>        vlan_pri;
-    bit<1>        vlan_cfi;
-#ifdef WITH_DOUBLE_VLAN_TERMINATION
-    _BOOL         push_double_vlan;
-    vlan_id_t     inner_vlan_id;
-    bit<3>        inner_vlan_pri;
-    bit<1>        inner_vlan_cfi;
-#endif // WITH_DOUBLE_VLAN_TERMINATION
-    mpls_label_t  mpls_label;
-    bit<8>        mpls_ttl;
-    _BOOL         skip_forwarding;
-    _BOOL         skip_next;
-    fwd_type_t    fwd_type;
-    next_id_t     next_id;
-    _BOOL         is_multicast;
-    _BOOL         is_controller_packet_out;
-    bit<8>        ip_proto;
-    bit<16>       l4_sport;
-    bit<16>       l4_dport;
+    fwd_type_t fwd_type;
+    next_id_t next_id;
+    _BOOL pop_vlan_when_packet_in;
+    _BOOL is_multicast;
+    _BOOL is_controller_packet_out;
+    _BOOL clone_to_cpu;
+    bit<8> ip_proto;
+    bit<16> l4_src_port;
+    bit<16> l4_dst_port;
 #ifdef WITH_SPGW
-    spgw_meta_t   spgw;
+    spgw_meta_t spgw;
 #endif // WITH_SPGW
-#ifdef WITH_BNG
-    bng_meta_t    bng;
-#endif // WITH_BNG
 #ifdef WITH_INT
     int_metadata_t int_meta;
 #endif // WITH_INT
@@ -205,12 +170,6 @@ struct fabric_metadata_t {
 struct parsed_headers_t {
     ethernet_t ethernet;
     vlan_tag_t vlan_tag;
-#if defined(WITH_XCONNECT) || defined(WITH_BNG) || defined(WITH_DOUBLE_VLAN_TERMINATION)
-    vlan_tag_t inner_vlan_tag;
-#endif // WITH_XCONNECT || WITH_BNG || WITH_DOUBLE_VLAN_TERMINATION
-#ifdef WITH_BNG
-    pppoe_t pppoe;
-#endif // WITH_BNG
     mpls_t mpls;
 #ifdef WITH_SPGW
     ipv4_t gtpu_ipv4;
@@ -223,6 +182,7 @@ struct parsed_headers_t {
 #ifdef WITH_IPV6
     ipv6_t ipv6;
 #endif // WITH_IPV6
+    arp_t arp;
     tcp_t tcp;
     udp_t udp;
     icmp_t icmp;

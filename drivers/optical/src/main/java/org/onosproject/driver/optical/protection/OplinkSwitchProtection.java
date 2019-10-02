@@ -156,6 +156,11 @@ public class OplinkSwitchProtection extends AbstractHandlerBehaviour implements 
     }
 
     @Override
+    public CompletableFuture<Void> switchWorkingPath(ConnectPoint identifier, int index) {
+        return switchToManual(identifier, index);
+    }
+
+    @Override
     public CompletableFuture<Void> switchToForce(ConnectPoint identifier, int index) {
         // TODO
         // Currently not supported for openflow device.

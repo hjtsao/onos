@@ -23,14 +23,6 @@
 #define WITH_INT
 #endif
 
-#ifndef WITHOUT_XCONNECT
-#define WITH_XCONNECT
-#endif
-
-#if ! defined(WITH_SIMPLE_NEXT)
-#define WITH_HASHED_NEXT
-#endif
-
 #ifndef _BOOL
 #define _BOOL bool
 #endif
@@ -86,7 +78,7 @@ typedef bit<32> next_id_t;
 typedef bit<20> mpls_label_t;
 typedef bit<9>  port_num_t;
 typedef bit<48> mac_addr_t;
-typedef bit<16> mcast_group_id_t;
+typedef bit<16> group_id_t;
 typedef bit<12> vlan_id_t;
 typedef bit<32> ipv4_addr_t;
 typedef bit<16> l4_port_t;
@@ -106,16 +98,10 @@ const bit<16> ETHERTYPE_QINQ = 0x88A8;
 const bit<16> ETHERTYPE_QINQ_NON_STD = 0x9100;
 const bit<16> ETHERTYPE_VLAN = 0x8100;
 const bit<16> ETHERTYPE_MPLS = 0x8847;
-const bit<16> ETHERTYPE_MPLS_MULTICAST = 0x8848;
+const bit<16> ETHERTYPE_MPLS_MULTICAST =0x8848;
 const bit<16> ETHERTYPE_IPV4 = 0x0800;
 const bit<16> ETHERTYPE_IPV6 = 0x86dd;
 const bit<16> ETHERTYPE_ARP  = 0x0806;
-const bit<16> ETHERTYPE_PPPOED = 0x8863;
-const bit<16> ETHERTYPE_PPPOES = 0x8864;
-
-const bit<16> PPPOE_PROTOCOL_IP4 = 0x0021;
-const bit<16> PPPOE_PROTOCOL_IP6 = 0x0057;
-const bit<16> PPPOE_PROTOCOL_MPLS = 0x0281;
 
 const bit<8> PROTO_ICMP = 1;
 const bit<8> PROTO_TCP = 6;
@@ -167,9 +153,5 @@ const bit<8> LOCAL_REPORT_HEADER_LEN = 16;
 const bit<8> ETH_HEADER_LEN = 14;
 const bit<8> IPV4_MIN_HEAD_LEN = 20;
 const bit<8> UDP_HEADER_LEN = 8;
-
-action nop() {
-    NoAction();
-}
 
 #endif

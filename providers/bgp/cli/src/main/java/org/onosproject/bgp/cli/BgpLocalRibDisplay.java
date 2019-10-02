@@ -15,9 +15,8 @@
  */
 package org.onosproject.bgp.cli;
 
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
 import org.onosproject.bgp.controller.BgpController;
 import org.onosproject.bgp.controller.BgpLocalRib;
 import org.onosproject.bgpio.protocol.BgpLSNlri;
@@ -55,7 +54,7 @@ import java.util.Iterator;
 import java.util.Arrays;
 
 
-@Service
+
 @Command(scope = "onos", name = "bgp-rib", description = "lists RIB configuration")
 public class BgpLocalRibDisplay extends AbstractShellCommand {
     private static final Logger log = LoggerFactory.getLogger(BgpLocalRibDisplay.class);
@@ -98,7 +97,7 @@ public class BgpLocalRibDisplay extends AbstractShellCommand {
     private int count = 0;
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         switch (name) {
             case NODETREE:
                 displayNodes();

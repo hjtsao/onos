@@ -1,4 +1,6 @@
-COMPILE_DEPS = CORE_DEPS
+COMPILE_DEPS = CORE_DEPS + [
+    "//incubator/api:onos-incubator-api",
+]
 
 TEST_DEPS = TEST_ADAPTERS + [
     "//utils/osgi:onlab-osgi-tests",

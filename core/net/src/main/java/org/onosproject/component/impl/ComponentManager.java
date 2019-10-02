@@ -16,41 +16,42 @@
 
 package org.onosproject.component.impl;
 
-import org.onosproject.component.ComponentService;
+import org.apache.felix.scr.ScrService;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.ApplicationId;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
-import org.osgi.service.component.runtime.ServiceComponentRuntime;
-import org.osgi.service.component.runtime.dto.ComponentDescriptionDTO;
+import org.onosproject.component.ComponentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static org.onlab.util.Tools.groupedThreads;
 
 /**
  * Manages OSGi components.
  */
-@Component(immediate = true, service = ComponentService.class)
+@Service
+@Component(immediate = true)
 public class ComponentManager implements ComponentService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private static final long TIMEOUT = 3000;
     private static final int POLLING_PERIOD_MS = 500;
+
     private static final int NUM_THREADS = 1;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected ServiceComponentRuntime scrService;
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected ScrService scrService;
 
     private Set<String> components;
 
@@ -60,15 +61,19 @@ public class ComponentManager implements ComponentService {
     private void activate() {
         components = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-        executor = newScheduledThreadPool(NUM_THREADS, groupedThreads("onos/component", "%d", log));
+        executor = Executors.newScheduledThreadPool(NUM_THREADS,
+                groupedThreads("onos/component", "%d", log));
+
         executor.scheduleAtFixedRate(() -> components.forEach(this::enableComponent),
-                                     0, POLLING_PERIOD_MS, TimeUnit.MILLISECONDS);
+                0, POLLING_PERIOD_MS, TimeUnit.MILLISECONDS);
+
         log.info("Started");
     }
 
     @Deactivate
     private void deactivate() {
         executor.shutdownNow();
+
         log.info("Stopped");
     }
 
@@ -84,36 +89,30 @@ public class ComponentManager implements ComponentService {
         disableComponent(name);
     }
 
-    private ComponentDescriptionDTO getComponent(String name) {
-        for (ComponentDescriptionDTO component : scrService.getComponentDescriptionDTOs()) {
-            if (component.name.equals(name)) {
-                return component;
-            }
-        }
-        return null;
-    }
-
     private void enableComponent(String name) {
-        ComponentDescriptionDTO component = getComponent(name);
-        if (component != null && !scrService.isComponentEnabled(component)) {
+        org.apache.felix.scr.Component[] components = scrService.getComponents(name);
+
+        if (components == null || components.length == 0) {
+            return;
+        }
+
+        org.apache.felix.scr.Component component = components[0];
+
+        if (component.getState() == org.apache.felix.scr.Component.STATE_DISABLED) {
             log.info("Enabling component {}", name);
-            try {
-                scrService.enableComponent(component).timeout(TIMEOUT);
-            } catch (Exception e) {
-                throw new IllegalStateException("Unable to start component " + name, e);
-            }
+            component.enable();
         }
     }
 
     private void disableComponent(String name) {
-        ComponentDescriptionDTO component = getComponent(name);
-        if (component != null && scrService.isComponentEnabled(component)) {
-            log.info("Disabling component {}", name);
-            try {
-                scrService.disableComponent(component).timeout(TIMEOUT);
-            } catch (Exception e) {
-                throw new IllegalStateException("Unable to start component " + name, e);
-            }
+        org.apache.felix.scr.Component[] components = scrService.getComponents(name);
+
+        if (components == null || components.length == 0) {
+            return;
         }
+
+        log.info("Disabling component {}", name);
+
+        components[0].disable();
     }
 }

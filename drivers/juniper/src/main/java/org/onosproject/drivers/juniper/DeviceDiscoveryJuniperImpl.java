@@ -23,12 +23,15 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.PortDescription;
+import org.onosproject.net.driver.AbstractHandlerBehaviour;
+import org.onosproject.netconf.NetconfController;
 import org.onosproject.netconf.NetconfException;
 import org.onosproject.netconf.NetconfSession;
 import org.slf4j.Logger;
 
 import java.util.List;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.drivers.juniper.JuniperUtils.REQ_IF_INFO;
 import static org.onosproject.drivers.juniper.JuniperUtils.REQ_MAC_ADD_INFO;
 import static org.onosproject.drivers.juniper.JuniperUtils.REQ_SYS_INFO;
@@ -41,7 +44,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Tested with MX240 junos 14.2
  */
 @Beta
-public class DeviceDiscoveryJuniperImpl extends JuniperAbstractHandlerBehaviour
+public class DeviceDiscoveryJuniperImpl extends AbstractHandlerBehaviour
         implements DeviceDescriptionDiscovery {
 
     private final Logger log = getLogger(getClass());
@@ -49,12 +52,13 @@ public class DeviceDiscoveryJuniperImpl extends JuniperAbstractHandlerBehaviour
     @Override
     public DeviceDescription discoverDeviceDetails() {
         DeviceId devId = handler().data().deviceId();
-        NetconfSession session = lookupNetconfSession(devId);
+        NetconfController controller = checkNotNull(handler().get(NetconfController.class));
+        NetconfSession session = controller.getDevicesMap().get(devId).getSession();
         String sysInfo;
-        String chassisMacAddresses;
+        String chassis;
         try {
             sysInfo = session.get(requestBuilder(REQ_SYS_INFO));
-            chassisMacAddresses = session.get(requestBuilder(REQ_MAC_ADD_INFO));
+            chassis = session.get(requestBuilder(REQ_MAC_ADD_INFO));
         } catch (NetconfException e) {
             log.warn("Failed to retrieve device details for {}", devId);
             return null;
@@ -62,8 +66,8 @@ public class DeviceDiscoveryJuniperImpl extends JuniperAbstractHandlerBehaviour
         log.trace("Device {} system-information {}", devId, sysInfo);
         DeviceDescription description =
                 JuniperUtils.parseJuniperDescription(devId,
-                        loadXmlString(sysInfo),
-                        chassisMacAddresses);
+                                                     loadXmlString(sysInfo),
+                                                     chassis);
         log.debug("Device {} description {}", devId, description);
         return description;
     }
@@ -71,12 +75,13 @@ public class DeviceDiscoveryJuniperImpl extends JuniperAbstractHandlerBehaviour
     @Override
     public List<PortDescription> discoverPortDetails() {
         DeviceId devId = handler().data().deviceId();
-        NetconfSession session = lookupNetconfSession(devId);
+        NetconfController controller = checkNotNull(handler().get(NetconfController.class));
+        NetconfSession session = controller.getDevicesMap().get(devId).getSession();
         String reply;
         try {
             reply = session.get(requestBuilder(REQ_IF_INFO));
         } catch (NetconfException e) {
-            log.warn("Failed to retrieve interface-information for device {}", devId);
+            log.warn("Failed to retrieve ports for device {}", devId);
             return ImmutableList.of();
         }
         log.trace("Device {} interface-information {}", devId, reply);

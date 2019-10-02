@@ -1,4 +1,4 @@
-COMPILE_DEPS = CORE_DEPS + NETTY + JAXB + [
+COMPILE_DEPS = CORE_DEPS + NETTY + [
     "@io_netty_netty//jar",
     "//protocols/ospf/api:onos-protocols-ospf-api",
 ]

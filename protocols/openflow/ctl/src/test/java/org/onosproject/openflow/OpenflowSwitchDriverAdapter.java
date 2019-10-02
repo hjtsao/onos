@@ -38,7 +38,6 @@ import org.projectfloodlight.openflow.protocol.OFPortDescStatsReply;
 import org.projectfloodlight.openflow.protocol.OFVersion;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Testing adapter for the OpenFlow switch driver class.
@@ -46,19 +45,6 @@ import java.util.Set;
 public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
 
     RoleState role = RoleState.MASTER;
-    // state of the connection
-    private Set<Dpid> connected;
-    private Dpid myDpid;
-    private boolean complete;
-
-    public OpenflowSwitchDriverAdapter() {
-    }
-
-    public OpenflowSwitchDriverAdapter(Set<Dpid> connected, Dpid myDpid, boolean complete) {
-        this.connected = connected;
-        this.myDpid = myDpid;
-        this.complete = complete;
-    }
 
     @Override
     public void setAgent(OpenFlowAgent agent) {
@@ -92,7 +78,7 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
 
     @Override
     public boolean connectSwitch() {
-        return !connected.contains(myDpid);
+        return false;
     }
 
     @Override
@@ -187,12 +173,12 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
 
     @Override
     public boolean isDriverHandshakeComplete() {
-        return complete;
+        return false;
     }
 
     @Override
     public void processDriverHandshakeMessage(OFMessage m) {
-        complete = true;
+
     }
 
     @Override

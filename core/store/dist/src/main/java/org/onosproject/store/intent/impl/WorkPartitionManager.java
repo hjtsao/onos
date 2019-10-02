@@ -15,6 +15,12 @@
  */
 package org.onosproject.store.intent.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.Leadership;
 import org.onosproject.cluster.LeadershipEvent;
@@ -26,18 +32,14 @@ import org.onosproject.event.ListenerRegistry;
 import org.onosproject.net.intent.WorkPartitionEvent;
 import org.onosproject.net.intent.WorkPartitionEventListener;
 import org.onosproject.net.intent.WorkPartitionService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.onlab.util.Tools.groupedThreads;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,23 +47,22 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.onlab.util.Tools.groupedThreads;
-
 /**
  * Manages the assignment of work partitions to instances.
  */
-@Component(immediate = true, service = WorkPartitionService.class)
+@Component(immediate = true)
+@Service
 public class WorkPartitionManager implements WorkPartitionService {
 
     private static final Logger log = LoggerFactory.getLogger(WorkPartitionManager.class);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LeadershipService leadershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected EventDeliveryService eventDispatcher;
 
     protected final AtomicBoolean rebalanceScheduled = new AtomicBoolean(false);
@@ -227,12 +228,7 @@ public class WorkPartitionManager implements WorkPartitionService {
             }
 
             if (event.type() == LeadershipEvent.Type.CANDIDATES_CHANGED) {
-                try {
-                    scheduleRebalance(0);
-                } catch (RejectedExecutionException ree) {
-                    // Queue was already shut down
-                    log.trace("executor already shut down", ree);
-                }
+                scheduleRebalance(0);
             }
         }
     }

@@ -1,4 +1,6 @@
-COMPILE_DEPS = CORE_DEPS + JACKSON + METRICS
+COMPILE_DEPS = CORE_DEPS + JACKSON + METRICS + [
+    "//incubator/api:onos-incubator-api",
+]
 
 TEST_DEPS = TEST + ["//core/api:onos-api-tests"]
 

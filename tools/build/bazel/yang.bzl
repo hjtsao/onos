@@ -32,9 +32,9 @@ REGISTRATOR = \
     "package org.onosproject.model.registrator.impl;\n" + \
     "\n" + \
     "import org.onosproject.yang.AbstractYangModelRegistrator;\n" + \
-    "import org.osgi.service.component.annotations.Component;\n" + \
+    "import org.apache.felix.scr.annotations.Component;\n" + \
     "\n" + \
-    "@Component(immediate = true, service = YangModelRegistrator.class)\n" + \
+    "@Component(immediate = true)\n" + \
     "public class YangModelRegistrator extends AbstractYangModelRegistrator {\n" + \
     "    public YangModelRegistrator() {\n" + \
     "        super(YangModelRegistrator.class);\n" + \
@@ -69,9 +69,6 @@ def _yang_library_impl(ctx):
         executable = ctx.executable._yang_compiler,
     )
 
-    java_runtime = ctx.attr._jdk[java_common.JavaRuntimeInfo]
-    jar_path = "%s/bin/jar" % java_runtime.java_home
-
     ctx.actions.run_shell(
         inputs = [generated_sources],
         outputs = [ctx.outputs.srcjar],
@@ -79,8 +76,7 @@ def _yang_library_impl(ctx):
             ctx.outputs.srcjar.path,
             generated_sources.path,
         ],
-        tools = java_runtime.files,
-        command = "%s cf $1 -C $2 src" % jar_path,
+        command = "jar cf $1 -C $2 src",
         progress_message = "Assembling YANG Java sources: %s" % ctx.attr.name,
     )
 
@@ -91,8 +87,7 @@ def _yang_library_impl(ctx):
             ctx.outputs.schema.path,
             generated_sources.path,
         ],
-        tools = java_runtime.files,
-        command = "%s cf $1 -C $2 schema" % jar_path,
+        command = "jar cf $1 -C $2 schema",
         progress_message = "Assembling YANG compiled schema: %s" % ctx.attr.name,
     )
 
@@ -107,10 +102,6 @@ _yang_library = rule(
             cfg = "host",
             allow_files = True,
             default = Label("//tools/build/bazel:onos_yang_compiler"),
-        ),
-        "_jdk": attr.label(
-            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
-            providers = [java_common.JavaRuntimeInfo],
         ),
     },
     outputs = {
@@ -148,18 +139,13 @@ def yang_library(
     srcs = [name + "-generate"]
 
     if len(java_srcs):
-        srcs.extend(java_srcs)
-        # FIXME (carmelo): is this genrule really needed?
-        # srcs += [name + "-srcjar"]
-        # native.genrule(
-        #     name = name + "-srcjar",
-        #     srcs = java_srcs,
-        #     outs = [name + ".srcjar"],
-        #     cmd = "$(location //external:jar) cf $(location %s.srcjar) $(SRCS)" % name,
-        #     tools = [
-        #         "//external:jar",
-        #     ]
-        # )
+        srcs += [name + "-srcjar"]
+        native.genrule(
+            name = name + "-srcjar",
+            srcs = java_srcs,
+            outs = [name + ".srcjar"],
+            cmd = "jar cf $(location %s.srcjar) $(SRCS)" % name,
+        )
 
     if not custom_registrator:
         srcs += [name + "-registrator"]

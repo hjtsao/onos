@@ -19,10 +19,11 @@
 
 #include "define.p4"
 
-parser FabricParser (packet_in packet,
-                     out parsed_headers_t hdr,
-                     inout fabric_metadata_t fabric_metadata,
-                     inout standard_metadata_t standard_metadata) {
+parser FabricParser (
+packet_in packet,
+out parsed_headers_t hdr,
+inout fabric_metadata_t fabric_metadata,
+inout standard_metadata_t standard_metadata) {
 
     bit<6> last_ipv4_dscp = 0;
 
@@ -40,16 +41,13 @@ parser FabricParser (packet_in packet,
 
     state parse_ethernet {
         packet.extract(hdr.ethernet);
-        fabric_metadata.last_eth_type = hdr.ethernet.eth_type;
-        fabric_metadata.vlan_id = DEFAULT_VLAN_ID;
-        transition select(hdr.ethernet.eth_type){
-            ETHERTYPE_QINQ: parse_vlan_tag;
-            ETHERTYPE_QINQ_NON_STD: parse_vlan_tag;
+        transition select(hdr.ethernet.ether_type){
             ETHERTYPE_VLAN: parse_vlan_tag;
             ETHERTYPE_MPLS: parse_mpls;
-            ETHERTYPE_IPV4: pre_parse_ipv4;
+            ETHERTYPE_ARP: parse_arp;
+            ETHERTYPE_IPV4: parse_ipv4;
 #ifdef WITH_IPV6
-            ETHERTYPE_IPV6: pre_parse_ipv6;
+            ETHERTYPE_IPV6: parse_ipv6;
 #endif // WITH_IPV6
             default: accept;
         }
@@ -57,63 +55,24 @@ parser FabricParser (packet_in packet,
 
     state parse_vlan_tag {
         packet.extract(hdr.vlan_tag);
-        transition select(hdr.vlan_tag.eth_type){
-            ETHERTYPE_IPV4: pre_parse_ipv4;
+        transition select(hdr.vlan_tag.ether_type){
+            ETHERTYPE_ARP: parse_arp;
+            ETHERTYPE_IPV4: parse_ipv4;
 #ifdef WITH_IPV6
-            ETHERTYPE_IPV6: pre_parse_ipv6;
+            ETHERTYPE_IPV6: parse_ipv6;
 #endif // WITH_IPV6
             ETHERTYPE_MPLS: parse_mpls;
-#if defined(WITH_XCONNECT) || defined(WITH_BNG) || defined(WITH_DOUBLE_VLAN_TERMINATION)
-            ETHERTYPE_VLAN: parse_inner_vlan_tag;
-#endif // WITH_XCONNECT
             default: accept;
         }
     }
-
-#if defined(WITH_XCONNECT) || defined(WITH_BNG) || defined(WITH_DOUBLE_VLAN_TERMINATION)
-    state parse_inner_vlan_tag {
-        packet.extract(hdr.inner_vlan_tag);
-        transition select(hdr.inner_vlan_tag.eth_type){
-            ETHERTYPE_IPV4: pre_parse_ipv4;
-#ifdef WITH_IPV6
-            ETHERTYPE_IPV6: pre_parse_ipv6;
-#endif // WITH_IPV6
-            ETHERTYPE_MPLS: parse_mpls;
-#ifdef WITH_BNG
-            ETHERTYPE_PPPOED: parse_pppoe;
-            ETHERTYPE_PPPOES: parse_pppoe;
-#endif // WITH_BNG
-            default: accept;
-        }
-    }
-#endif // WITH_XCONNECT || WITH_BNG || WITH_DOUBLE_VLAN_TERMINATION
-
-#ifdef WITH_BNG
-    state parse_pppoe {
-        packet.extract(hdr.pppoe);
-        transition select(hdr.pppoe.protocol) {
-            PPPOE_PROTOCOL_MPLS: parse_mpls;
-            PPPOE_PROTOCOL_IP4: pre_parse_ipv4;
-#ifdef WITH_IPV6
-            PPPOE_PROTOCOL_IP6: pre_parse_ipv6;
-#endif // WITH_IPV6
-            default: accept;
-        }
-    }
-#endif // WITH_BNG
 
     state parse_mpls {
         packet.extract(hdr.mpls);
-        fabric_metadata.is_mpls = _TRUE;
-        fabric_metadata.mpls_label = hdr.mpls.label;
-        fabric_metadata.mpls_ttl = hdr.mpls.ttl;
         // There is only one MPLS label for this fabric.
-        // Assume header after MPLS header is IPv4/IPv6
+        // Assume header after MPLS header is IP/IPv6
         // Lookup first 4 bits for version
         transition select(packet.lookahead<bit<IP_VER_LENGTH>>()) {
-            // The packet should be either IPv4 or IPv6.
-            // If we have MPLS, go directly to parsing state without
-            // moving to pre_ states, the packet is considered MPLS
+            //The packet should be either IPv4 or IPv6.
             IP_VERSION_4: parse_ipv4;
 #ifdef WITH_IPV6
             IP_VERSION_6: parse_ipv6;
@@ -122,15 +81,9 @@ parser FabricParser (packet_in packet,
         }
     }
 
-    // Intermediate state to set is_ipv4
-    state pre_parse_ipv4 {
-        fabric_metadata.is_ipv4 = _TRUE;
-        transition parse_ipv4;
-    }
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
         fabric_metadata.ip_proto = hdr.ipv4.protocol;
-        fabric_metadata.ip_eth_type = ETHERTYPE_IPV4;
         last_ipv4_dscp = hdr.ipv4.dscp;
         //Need header verification?
         transition select(hdr.ipv4.protocol) {
@@ -142,15 +95,9 @@ parser FabricParser (packet_in packet,
     }
 
 #ifdef WITH_IPV6
-    // Intermediate state to set is_ipv6
-    state pre_parse_ipv6 {
-        fabric_metadata.is_ipv6 = _TRUE;
-        transition parse_ipv6;
-    }
     state parse_ipv6 {
         packet.extract(hdr.ipv6);
         fabric_metadata.ip_proto = hdr.ipv6.next_hdr;
-        fabric_metadata.ip_eth_type = ETHERTYPE_IPV6;
         transition select(hdr.ipv6.next_hdr) {
             PROTO_TCP: parse_tcp;
             PROTO_UDP: parse_udp;
@@ -160,10 +107,15 @@ parser FabricParser (packet_in packet,
     }
 #endif // WITH_IPV6
 
+    state parse_arp {
+        packet.extract(hdr.arp);
+        transition accept;
+    }
+
     state parse_tcp {
         packet.extract(hdr.tcp);
-        fabric_metadata.l4_sport = hdr.tcp.sport;
-        fabric_metadata.l4_dport = hdr.tcp.dport;
+        fabric_metadata.l4_src_port = hdr.tcp.src_port;
+        fabric_metadata.l4_dst_port = hdr.tcp.dst_port;
 #ifdef WITH_INT
         transition parse_int;
 #else
@@ -173,9 +125,9 @@ parser FabricParser (packet_in packet,
 
     state parse_udp {
         packet.extract(hdr.udp);
-        fabric_metadata.l4_sport = hdr.udp.sport;
-        fabric_metadata.l4_dport = hdr.udp.dport;
-        transition select(hdr.udp.dport) {
+        fabric_metadata.l4_src_port = hdr.udp.src_port;
+        fabric_metadata.l4_dst_port = hdr.udp.dst_port;
+        transition select(hdr.udp.dst_port) {
 #ifdef WITH_SPGW
             UDP_PORT_GTPU: parse_gtpu;
 #endif // WITH_SPGW
@@ -222,8 +174,8 @@ parser FabricParser (packet_in packet,
 
     state parse_inner_udp {
         packet.extract(hdr.inner_udp);
-        fabric_metadata.l4_sport = hdr.inner_udp.sport;
-        fabric_metadata.l4_dport = hdr.inner_udp.dport;
+        fabric_metadata.l4_src_port = hdr.inner_udp.src_port;
+        fabric_metadata.l4_dst_port = hdr.inner_udp.dst_port;
 #ifdef WITH_INT
         transition parse_int;
 #else
@@ -273,8 +225,7 @@ parser FabricParser (packet_in packet,
 #endif // WITH_INT
 }
 
-control FabricDeparser(packet_out packet,in parsed_headers_t hdr) {
-
+control FabricDeparser(packet_out packet, in parsed_headers_t hdr) {
     apply {
         packet.emit(hdr.packet_in);
 #ifdef WITH_INT_SINK
@@ -285,13 +236,8 @@ control FabricDeparser(packet_out packet,in parsed_headers_t hdr) {
 #endif // WITH_INT_SINK
         packet.emit(hdr.ethernet);
         packet.emit(hdr.vlan_tag);
-#if defined(WITH_XCONNECT) || defined(WITH_BNG) || defined(WITH_DOUBLE_VLAN_TERMINATION)
-        packet.emit(hdr.inner_vlan_tag);
-#endif // WITH_XCONNECT || WITH_BNG || WITH_DOUBLE_VLAN_TERMINATION
-#ifdef WITH_BNG
-        packet.emit(hdr.pppoe);
-#endif // WITH_BNG
         packet.emit(hdr.mpls);
+        packet.emit(hdr.arp);
 #ifdef WITH_SPGW
         packet.emit(hdr.gtpu_ipv4);
         packet.emit(hdr.gtpu_udp);

@@ -20,6 +20,12 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.SetMultimap;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.pi.model.PiPipeconfId;
 import org.onosproject.net.pi.service.PiPipeconfDeviceMappingEvent;
@@ -32,11 +38,6 @@ import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Set;
@@ -46,19 +47,20 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Manages information of pipeconf to device binding.
  */
-@Component(immediate = true, service = PiPipeconfMappingStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedDevicePipeconfMappingStore
         extends AbstractStore<PiPipeconfDeviceMappingEvent, PiPipeconfMappingStoreDelegate>
         implements PiPipeconfMappingStore {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     protected ConsistentMap<DeviceId, PiPipeconfId> deviceToPipeconf;
 
-    protected final MapEventListener<DeviceId, PiPipeconfId> mapListener =
+    protected final MapEventListener<DeviceId, PiPipeconfId> pipeconfListener =
             new InternalPiPipeconfListener();
 
     protected SetMultimap<PiPipeconfId, DeviceId> pipeconfToDevices =
@@ -70,13 +72,13 @@ public class DistributedDevicePipeconfMappingStore
                 .withName("onos-pipeconf-table")
                 .withSerializer(Serializer.using(KryoNamespaces.API))
                 .build();
-        deviceToPipeconf.addListener(mapListener);
+        deviceToPipeconf.addListener(pipeconfListener);
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-        deviceToPipeconf.removeListener(mapListener);
+        deviceToPipeconf.removeListener(pipeconfListener);
         deviceToPipeconf = null;
         pipeconfToDevices = null;
         log.info("Stopped");

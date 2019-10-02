@@ -3,12 +3,13 @@ COMPILE_DEPS = CORE_DEPS + NETTY + JACKSON + KRYO + [
     "//utils/rest:onlab-rest",
     "//core/store/serializers:onos-core-serializers",
     "@io_netty_netty_transport//jar",
-    "@io_netty_netty_transport_native_epoll//jar",
-    "@io_netty_netty_transport_native_unix_common//jar",
     "@io_netty_netty_codec//jar",
     "@io_netty_netty_handler//jar",
+    "@io_netty_netty_transport_native_epoll//jar",
+    "@io_netty_netty_transport_native_unix_common//jar",
     "@io_netty_netty_resolver//jar",
     "@commons_math3//jar",
+    "//incubator/api:onos-incubator-api",
 ]
 
 TEST_DEPS = TEST + [

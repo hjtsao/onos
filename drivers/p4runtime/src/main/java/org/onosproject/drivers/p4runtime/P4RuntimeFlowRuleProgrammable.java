@@ -19,33 +19,27 @@ package org.onosproject.drivers.p4runtime;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Striped;
+import org.onlab.util.SharedExecutors;
 import org.onosproject.drivers.p4runtime.mirror.P4RuntimeTableMirror;
 import org.onosproject.drivers.p4runtime.mirror.TimedEntry;
 import org.onosproject.net.flow.DefaultFlowEntry;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.FlowRuleProgrammable;
-import org.onosproject.net.pi.model.PiCounterType;
 import org.onosproject.net.pi.model.PiPipelineInterpreter;
 import org.onosproject.net.pi.model.PiPipelineModel;
 import org.onosproject.net.pi.model.PiTableId;
+import org.onosproject.net.pi.model.PiTableModel;
 import org.onosproject.net.pi.runtime.PiCounterCell;
 import org.onosproject.net.pi.runtime.PiCounterCellData;
-import org.onosproject.net.pi.runtime.PiCounterCellHandle;
 import org.onosproject.net.pi.runtime.PiCounterCellId;
-import org.onosproject.net.pi.runtime.PiEntityType;
-import org.onosproject.net.pi.runtime.PiHandle;
 import org.onosproject.net.pi.runtime.PiTableEntry;
 import org.onosproject.net.pi.runtime.PiTableEntryHandle;
 import org.onosproject.net.pi.service.PiFlowRuleTranslator;
 import org.onosproject.net.pi.service.PiTranslatedEntity;
 import org.onosproject.net.pi.service.PiTranslationException;
-import org.onosproject.p4runtime.api.P4RuntimeReadClient;
-import org.onosproject.p4runtime.api.P4RuntimeWriteClient.UpdateType;
-import org.onosproject.p4runtime.api.P4RuntimeWriteClient.WriteRequest;
-import org.onosproject.p4runtime.api.P4RuntimeWriteClient.WriteResponse;
+import org.onosproject.p4runtime.api.P4RuntimeClient.WriteOperationType;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -57,14 +51,15 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static org.onosproject.drivers.p4runtime.P4RuntimeDriverUtils.getInterpreter;
+import static com.google.common.collect.Lists.newArrayList;
 import static org.onosproject.drivers.p4runtime.P4RuntimeFlowRuleProgrammable.Operation.APPLY;
 import static org.onosproject.drivers.p4runtime.P4RuntimeFlowRuleProgrammable.Operation.REMOVE;
 import static org.onosproject.net.flow.FlowEntry.FlowEntryState.ADDED;
-import static org.onosproject.p4runtime.api.P4RuntimeWriteClient.UpdateType.DELETE;
-import static org.onosproject.p4runtime.api.P4RuntimeWriteClient.UpdateType.INSERT;
-import static org.onosproject.p4runtime.api.P4RuntimeWriteClient.UpdateType.MODIFY;
+import static org.onosproject.p4runtime.api.P4RuntimeClient.WriteOperationType.DELETE;
+import static org.onosproject.p4runtime.api.P4RuntimeClient.WriteOperationType.INSERT;
+import static org.onosproject.p4runtime.api.P4RuntimeClient.WriteOperationType.MODIFY;
 
 /**
  * Implementation of the flow rule programmable behaviour for P4Runtime.
@@ -79,6 +74,11 @@ public class P4RuntimeFlowRuleProgrammable
     // entries.
     private static final String DELETE_BEFORE_UPDATE = "tableDeleteBeforeUpdate";
     private static final boolean DEFAULT_DELETE_BEFORE_UPDATE = false;
+
+    // If true, we ignore re-installing rules that already exist in the
+    // device mirror, i.e. same match key and action.
+    private static final String IGNORE_SAME_ENTRY_UPDATE = "tableIgnoreSameEntryUpdate";
+    private static final boolean DEFAULT_IGNORE_SAME_ENTRY_UPDATE = false;
 
     // If true, we avoid querying the device and return what's already known by
     // the ONOS store.
@@ -96,35 +96,36 @@ public class P4RuntimeFlowRuleProgrammable
     private static final String READ_COUNTERS_WITH_TABLE_ENTRIES = "tableReadCountersWithTableEntries";
     private static final boolean DEFAULT_READ_COUNTERS_WITH_TABLE_ENTRIES = true;
 
-    // True if target supports reading and writing table entries.
-    private static final String SUPPORT_DEFAULT_TABLE_ENTRY = "supportDefaultTableEntry";
-    private static final boolean DEFAULT_SUPPORT_DEFAULT_TABLE_ENTRY = true;
+    // For default entries, P4Runtime mandates that only MODIFY messages are
+    // allowed. If true, treats default entries as normal table entries,
+    // e.g. inserting them first.
+    private static final String TABLE_DEFAULT_AS_ENTRY = "tableDefaultAsEntry";
+    private static final boolean DEFAULT_TABLE_DEFAULT_AS_ENTRY = false;
 
-    // Used to make sure concurrent calls to write flow rules are serialized so
-    // that each request gets consistent access to mirror state.
-    private static final Striped<Lock> WRITE_LOCKS = Striped.lock(30);
+    // Needed to synchronize operations over the same table entry.
+    private static final Striped<Lock> ENTRY_LOCKS = Striped.lock(30);
 
     private PiPipelineModel pipelineModel;
     private P4RuntimeTableMirror tableMirror;
     private PiFlowRuleTranslator translator;
 
     @Override
-    protected boolean setupBehaviour(String opName) {
+    protected boolean setupBehaviour() {
 
-        if (!super.setupBehaviour(opName)) {
+        if (!super.setupBehaviour()) {
             return false;
         }
 
         pipelineModel = pipeconf.pipelineModel();
         tableMirror = handler().get(P4RuntimeTableMirror.class);
-        translator = translationService.flowRuleTranslator();
+        translator = piTranslationService.flowRuleTranslator();
         return true;
     }
 
     @Override
     public Collection<FlowEntry> getFlowEntries() {
 
-        if (!setupBehaviour("getFlowEntries()")) {
+        if (!setupBehaviour()) {
             return Collections.emptyList();
         }
 
@@ -135,28 +136,30 @@ public class P4RuntimeFlowRuleProgrammable
         final ImmutableList.Builder<FlowEntry> result = ImmutableList.builder();
         final List<PiTableEntry> inconsistentEntries = Lists.newArrayList();
 
-        // Read table entries from device.
-        final Collection<PiTableEntry> deviceEntries = getAllTableEntriesFromDevice();
-        if (deviceEntries == null) {
-            // Potential error at the client level.
+        // Read table entries, including default ones.
+        final Collection<PiTableEntry> deviceEntries = Stream.concat(
+                streamEntries(), streamDefaultEntries())
+                // Ignore entries from constant tables.
+                .filter(e -> !tableIsConstant(e.table()))
+                // Device implementation might return duplicate entries. For
+                // example if reading only default ones is not supported and
+                // non-default entries are returned, by using distinct() we are
+                // robust against that possibility.
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (deviceEntries.isEmpty()) {
             return Collections.emptyList();
         }
 
         // Synchronize mirror with the device state.
-        tableMirror.sync(deviceId, deviceEntries);
-
-        if (deviceEntries.isEmpty()) {
-            // Nothing to do.
-            return Collections.emptyList();
-        }
-
-        final Map<PiTableEntryHandle, PiCounterCellData> counterCellMap =
+        syncMirror(deviceEntries);
+        final Map<PiTableEntry, PiCounterCellData> counterCellMap =
                 readEntryCounters(deviceEntries);
         // Forge flow entries with counter values.
         for (PiTableEntry entry : deviceEntries) {
-            final PiTableEntryHandle handle = entry.handle(deviceId);
             final FlowEntry flowEntry = forgeFlowEntry(
-                    entry, handle, counterCellMap.get(handle));
+                    entry, counterCellMap.get(entry));
             if (flowEntry == null) {
                 // Entry is on device but unknown to translation service or
                 // device mirror. Inconsistent. Mark for removal.
@@ -171,53 +174,41 @@ public class P4RuntimeFlowRuleProgrammable
             }
         }
 
-        if (!inconsistentEntries.isEmpty()) {
+        if (inconsistentEntries.size() > 0) {
             // Trigger clean up of inconsistent entries.
-            log.warn("Found {} inconsistent table entries on {}, removing them...",
-                     inconsistentEntries.size(), deviceId);
-            // Submit delete request and update mirror when done.
-            client.write(p4DeviceId, pipeconf)
-                    .entities(inconsistentEntries, DELETE)
-                    .submit().whenComplete((response, ex) -> {
-                if (ex != null) {
-                    log.error("Exception removing inconsistent table entries", ex);
-                } else {
-                    log.debug("Successfully removed {} out of {} inconsistent entries",
-                              response.success().size(), response.all().size());
-                }
-                tableMirror.applyWriteResponse(response);
-            });
-
+            SharedExecutors.getSingleThreadExecutor().execute(
+                    () -> cleanUpInconsistentEntries(inconsistentEntries));
         }
 
         return result.build();
     }
 
-    private Collection<PiTableEntry> getAllTableEntriesFromDevice() {
-        final P4RuntimeReadClient.ReadRequest request = client.read(
-                p4DeviceId, pipeconf);
-        // Read entries from all non-constant tables, including default ones.
-        pipelineModel.tables().stream()
-                .filter(t -> !t.isConstantTable())
-                .forEach(t -> {
-                    request.tableEntries(t.id());
-                    if (driverBoolProperty(SUPPORT_DEFAULT_TABLE_ENTRY,
-                                           DEFAULT_SUPPORT_DEFAULT_TABLE_ENTRY) &&
-                            !t.constDefaultAction().isPresent()) {
-                        request.defaultTableEntry(t.id());
-                    }
-                });
-        final P4RuntimeReadClient.ReadResponse response = request.submitSync();
-        if (!response.isSuccess()) {
-            return null;
-        }
-        return response.all(PiTableEntry.class).stream()
-                // Device implementation might return duplicate entries. For
-                // example if reading only default ones is not supported and
-                // non-default entries are returned, by using distinct() we
-                // are robust against that possibility.
-                .distinct()
-                .collect(Collectors.toList());
+    private Stream<PiTableEntry> streamEntries() {
+        return getFutureWithDeadline(
+                client.dumpAllTables(pipeconf), "dumping all tables",
+                Collections.emptyList())
+                .stream();
+    }
+
+    private Stream<PiTableEntry> streamDefaultEntries() {
+        // Ignore tables with constant default action.
+        final Set<PiTableId> defaultTables = pipelineModel.tables()
+                .stream()
+                .filter(table -> !table.constDefaultAction().isPresent())
+                .map(PiTableModel::id)
+                .collect(Collectors.toSet());
+        return defaultTables.isEmpty() ? Stream.empty()
+                : getFutureWithDeadline(
+                client.dumpTables(defaultTables, true, pipeconf),
+                "dumping default table entries",
+                Collections.emptyList())
+                .stream();
+    }
+
+    private void syncMirror(Collection<PiTableEntry> entries) {
+        Map<PiTableEntryHandle, PiTableEntry> handleMap = Maps.newHashMap();
+        entries.forEach(e -> handleMap.put(PiTableEntryHandle.of(deviceId, e), e));
+        tableMirror.sync(deviceId, handleMap);
     }
 
     @Override
@@ -231,8 +222,9 @@ public class P4RuntimeFlowRuleProgrammable
     }
 
     private FlowEntry forgeFlowEntry(PiTableEntry entry,
-                                     PiTableEntryHandle handle,
                                      PiCounterCellData cellData) {
+        final PiTableEntryHandle handle = PiTableEntryHandle
+                .of(deviceId, entry);
         final Optional<PiTranslatedEntity<FlowRule, PiTableEntry>>
                 translatedEntity = translator.lookup(handle);
         final TimedEntry<PiTableEntry> timedEntry = tableMirror.get(handle);
@@ -265,185 +257,145 @@ public class P4RuntimeFlowRuleProgrammable
     private Collection<FlowEntry> getFlowEntriesFromMirror() {
         return tableMirror.getAll(deviceId).stream()
                 .map(timedEntry -> forgeFlowEntry(
-                        timedEntry.entry(), timedEntry.entry().handle(deviceId), null))
+                        timedEntry.entry(), null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+    }
+
+    private void cleanUpInconsistentEntries(Collection<PiTableEntry> piEntries) {
+        log.warn("Found {} inconsistent table entries on {}, removing them...",
+                 piEntries.size(), deviceId);
+        // log.info("P4MT: ignore inconsistent flow rules");
+        piEntries.forEach(entry -> {
+            log.debug(entry.toString());
+            final PiTableEntryHandle handle = PiTableEntryHandle.of(deviceId, entry);
+            ENTRY_LOCKS.get(handle).lock();
+            try {
+                applyEntry(handle, entry, null, REMOVE);
+            } finally {
+                ENTRY_LOCKS.get(handle).unlock();
+            }
+        });
     }
 
     private Collection<FlowRule> processFlowRules(Collection<FlowRule> rules,
                                                   Operation driverOperation) {
-        if (!setupBehaviour("processFlowRules()") || rules.isEmpty()) {
+
+        if (!setupBehaviour() || rules.isEmpty()) {
             return Collections.emptyList();
         }
-        // Created batched write request.
-        final WriteRequest request = client.write(p4DeviceId, pipeconf);
-        // For each rule, translate to PI and append to write request.
-        final Map<PiHandle, FlowRule> handleToRuleMap = Maps.newHashMap();
-        final List<FlowRule> skippedRules = Lists.newArrayList();
-        final CompletableFuture<WriteResponse> futureResponse;
-        WRITE_LOCKS.get(deviceId).lock();
-        try {
-            for (FlowRule rule : rules) {
-                // Translate.
-                final PiTableEntry entry;
-                try {
-                    entry = translator.translate(rule, pipeconf);
-                } catch (PiTranslationException e) {
-                    log.warn("Unable to translate flow rule for pipeconf '{}': {} [{}]",
-                             pipeconf.id(), e.getMessage(), rule);
-                    // Next rule.
-                    continue;
-                }
-                final PiTableEntryHandle handle = entry.handle(deviceId);
-                handleToRuleMap.put(handle, rule);
-                // Update translation store.
-                if (driverOperation.equals(APPLY)) {
-                    translator.learn(handle, new PiTranslatedEntity<>(
-                            rule, entry, handle));
-                } else {
-                    translator.forget(handle);
-                }
-                // Append entry to batched write request (returns false), or skip (true)
-                if (appendEntryToWriteRequestOrSkip(
-                        request, handle, entry, driverOperation)) {
-                    skippedRules.add(rule);
-                }
+
+        final ImmutableList.Builder<FlowRule> result = ImmutableList.builder();
+
+        // TODO: send writes in bulk (e.g. all entries to insert, modify or delete).
+        // Instead of calling the client for each one of them.
+
+        for (FlowRule ruleToApply : rules) {
+
+            final PiTableEntry piEntryToApply;
+            try {
+                piEntryToApply = translator.translate(ruleToApply, pipeconf);
+            } catch (PiTranslationException e) {
+                log.warn("Unable to translate flow rule for pipeconf '{}': {} - {}",
+                         pipeconf.id(), e.getMessage(), ruleToApply);
+                // Next rule.
+                continue;
             }
-            if (request.pendingUpdates().isEmpty()) {
-                // All good. No need to write on device.
-                return rules;
+
+            final PiTableEntryHandle handle = PiTableEntryHandle
+                    .of(deviceId, piEntryToApply);
+
+            // Serialize operations over the same match key/table/device ID.
+            ENTRY_LOCKS.get(handle).lock();
+            try {
+                if (applyEntry(handle, piEntryToApply,
+                               ruleToApply, driverOperation)) {
+                    result.add(ruleToApply);
+                }
+            } finally {
+                ENTRY_LOCKS.get(handle).unlock();
             }
-            // Update mirror.
-            tableMirror.applyWriteRequest(request);
-            // Async submit request to server.
-            futureResponse = request.submit();
-        } finally {
-            WRITE_LOCKS.get(deviceId).unlock();
         }
-        // Wait for response.
-        final WriteResponse response = Futures.getUnchecked(futureResponse);
-        // Derive successfully applied flow rule from response.
-        final List<FlowRule> appliedRules = getAppliedFlowRules(
-                response, handleToRuleMap, driverOperation);
-        // Return skipped and applied rules.
-        return ImmutableList.<FlowRule>builder()
-                .addAll(skippedRules).addAll(appliedRules).build();
+
+        return result.build();
     }
 
-    private List<FlowRule> getAppliedFlowRules(
-            WriteResponse response,
-            Map<PiHandle, FlowRule> handleToFlowRuleMap,
-            Operation driverOperation) {
-        // Returns a list of flow rules that were successfully written on the
-        // server according to the given write response and operation.
-        return response.success().stream()
-                .filter(r -> r.entityType().equals(PiEntityType.TABLE_ENTRY))
-                .filter(r -> {
-                    // Filter intermediate responses (e.g. P4Runtime DELETE
-                    // during FlowRule APPLY because we are performing
-                    // delete-before-update)
-                    return isUpdateTypeRelevant(r.updateType(), driverOperation);
-                })
-                .map(r -> {
-                    final FlowRule rule = handleToFlowRuleMap.get(r.handle());
-                    if (rule == null) {
-                        log.warn("Server returned unrecognized table entry " +
-                                         "handle in write response: {}", r.handle());
-                    }
-                    return rule;
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-    }
-
-    private boolean isUpdateTypeRelevant(UpdateType p4UpdateType, Operation driverOperation) {
-        switch (p4UpdateType) {
-            case INSERT:
-            case MODIFY:
-                if (!driverOperation.equals(APPLY)) {
-                    return false;
-                }
-                break;
-            case DELETE:
-                if (!driverOperation.equals(REMOVE)) {
-                    return false;
-                }
-                break;
-            default:
-                log.error("Unknown update type {}", p4UpdateType);
-                return false;
-        }
-        return true;
-    }
-
-    private boolean appendEntryToWriteRequestOrSkip(
-            final WriteRequest writeRequest,
-            final PiTableEntryHandle handle,
-            PiTableEntry piEntryToApply,
-            final Operation driverOperation) {
+    /**
+     * Applies the given entry to the device, and returns true if the operation
+     * was successful, false otherwise.
+     */
+    private boolean applyEntry(final PiTableEntryHandle handle,
+                               PiTableEntry piEntryToApply,
+                               final FlowRule ruleToApply,
+                               final Operation driverOperation) {
         // Depending on the driver operation, and if a matching rule exists on
-        // the device/mirror, decide which P4Runtime update operation to perform
-        // for this entry. In some cases, the entry is skipped from the write
-        // request but we want to return the corresponding flow rule as
-        // successfully written. In this case, we return true.
+        // the device, decide which P4 Runtime write operation to perform for
+        // this entry.
         final TimedEntry<PiTableEntry> piEntryOnDevice = tableMirror.get(handle);
-        final UpdateType updateType;
+        final WriteOperationType p4Operation;
+        final WriteOperationType storeOperation;
 
-        final boolean supportDefaultEntry = driverBoolProperty(
-                SUPPORT_DEFAULT_TABLE_ENTRY, DEFAULT_SUPPORT_DEFAULT_TABLE_ENTRY);
+        final boolean defaultAsEntry = driverBoolProperty(
+                TABLE_DEFAULT_AS_ENTRY, DEFAULT_TABLE_DEFAULT_AS_ENTRY);
+        final boolean ignoreSameEntryUpdate = driverBoolProperty(
+                IGNORE_SAME_ENTRY_UPDATE, DEFAULT_IGNORE_SAME_ENTRY_UPDATE);
         final boolean deleteBeforeUpdate = driverBoolProperty(
                 DELETE_BEFORE_UPDATE, DEFAULT_DELETE_BEFORE_UPDATE);
-
         if (driverOperation == APPLY) {
             if (piEntryOnDevice == null) {
                 // Entry is first-timer, INSERT or MODIFY if default action.
-                updateType = !piEntryToApply.isDefaultAction() || !supportDefaultEntry
+                p4Operation = !piEntryToApply.isDefaultAction() || defaultAsEntry
                         ? INSERT : MODIFY;
+                storeOperation = p4Operation;
             } else {
-                if (piEntryToApply.action().equals(piEntryOnDevice.entry().action())) {
-                    // FIXME: should we check for other attributes of the table
-                    //  entry? For example can we modify the priority?
+                if (ignoreSameEntryUpdate &&
+                        piEntryToApply.action().equals(piEntryOnDevice.entry().action())) {
                     log.debug("Ignoring re-apply of existing entry: {}", piEntryToApply);
-                    return true;
+                    p4Operation = null;
                 } else if (deleteBeforeUpdate && !piEntryToApply.isDefaultAction()) {
-                    // Some devices return error when updating existing entries.
-                    // If requested, remove entry before re-inserting the
-                    // modified one, except the default action entry, that
-                    // cannot be removed.
-                    writeRequest.delete(handle);
-                    updateType = INSERT;
+                    // Some devices return error when updating existing
+                    // entries. If requested, remove entry before
+                    // re-inserting the modified one, except the default action
+                    // entry, that cannot be removed.
+                    applyEntry(handle, piEntryOnDevice.entry(), null, REMOVE);
+                    p4Operation = INSERT;
                 } else {
-                    updateType = MODIFY;
+                    p4Operation = MODIFY;
                 }
+                storeOperation = p4Operation;
             }
         } else {
-            // REMOVE.
             if (piEntryToApply.isDefaultAction()) {
                 // Cannot remove default action. Instead we should use the
                 // original defined by the interpreter (if any).
-                final PiTableEntry originalDefaultEntry = getOriginalDefaultEntry(
-                        piEntryToApply.table());
-                if (originalDefaultEntry == null) {
+                piEntryToApply = getOriginalDefaultEntry(piEntryToApply.table());
+                if (piEntryToApply == null) {
                     return false;
                 }
-                return appendEntryToWriteRequestOrSkip(
-                        writeRequest, originalDefaultEntry.handle(deviceId),
-                        originalDefaultEntry, APPLY);
+                p4Operation = MODIFY;
             } else {
-                if (piEntryOnDevice == null) {
-                    log.debug("Ignoring delete of missing entry: {}",
-                              piEntryToApply);
-                    return true;
-                }
-                updateType = DELETE;
+                p4Operation = DELETE;
             }
+            // Still want to delete the default entry from the mirror and
+            // translation store.
+            storeOperation = DELETE;
         }
-        writeRequest.entity(piEntryToApply, updateType);
-        return false;
+
+        if (p4Operation != null) {
+            if (writeEntry(piEntryToApply, p4Operation)) {
+                updateStores(handle, piEntryToApply, ruleToApply, storeOperation);
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            // If no operation, let's pretend we applied the rule to the device.
+            return true;
+        }
     }
 
     private PiTableEntry getOriginalDefaultEntry(PiTableId tableId) {
-        final PiPipelineInterpreter interpreter = getInterpreter(handler());
+        final PiPipelineInterpreter interpreter = getInterpreter();
         if (interpreter == null) {
             log.warn("Missing interpreter for {}, cannot get default action",
                      deviceId);
@@ -470,9 +422,40 @@ public class P4RuntimeFlowRuleProgrammable
                 originalDefaultEntry.action().equals(entry.action());
     }
 
-    private Map<PiTableEntryHandle, PiCounterCellData> readEntryCounters(
-            Collection<PiTableEntry> tableEntries) {
+    /**
+     * Performs a write operation on the device.
+     */
+    private boolean writeEntry(PiTableEntry entry,
+                               WriteOperationType p4Operation) {
+        final CompletableFuture<Boolean> future = client.writeTableEntries(
+                newArrayList(entry), p4Operation, pipeconf);
+        // If false, errors logged by internal calls.
+        return getFutureWithDeadline(
+                future, "performing table " + p4Operation.name(), false);
+    }
 
+    private void updateStores(PiTableEntryHandle handle,
+                              PiTableEntry entry,
+                              FlowRule rule,
+                              WriteOperationType p4Operation) {
+        switch (p4Operation) {
+            case INSERT:
+            case MODIFY:
+                tableMirror.put(handle, entry);
+                translator.learn(handle, new PiTranslatedEntity<>(rule, entry, handle));
+                break;
+            case DELETE:
+                tableMirror.remove(handle);
+                translator.forget(handle);
+                break;
+            default:
+                throw new IllegalArgumentException(
+                        "Unknown operation " + p4Operation.name());
+        }
+    }
+
+    private Map<PiTableEntry, PiCounterCellData> readEntryCounters(
+            Collection<PiTableEntry> tableEntries) {
         if (!driverBoolProperty(SUPPORT_TABLE_COUNTERS,
                                 DEFAULT_SUPPORT_TABLE_COUNTERS)
                 || tableEntries.isEmpty()) {
@@ -481,32 +464,30 @@ public class P4RuntimeFlowRuleProgrammable
 
         if (driverBoolProperty(READ_COUNTERS_WITH_TABLE_ENTRIES,
                                DEFAULT_READ_COUNTERS_WITH_TABLE_ENTRIES)) {
-            return tableEntries.stream()
-                    .filter(t -> t.counter() != null)
-                    .collect(Collectors.toMap(
-                            t -> t.handle(deviceId), PiTableEntry::counter));
+            return tableEntries.stream().collect(Collectors.toMap(c -> c, PiTableEntry::counter));
         } else {
-            final Set<PiHandle> cellHandles = tableEntries.stream()
+            Collection<PiCounterCell> cells;
+            Set<PiCounterCellId> cellIds = tableEntries.stream()
+                    // Ignore counter for default entry.
                     .filter(e -> !e.isDefaultAction())
                     .filter(e -> tableHasCounter(e.table()))
                     .map(PiCounterCellId::ofDirect)
-                    .map(id -> PiCounterCellHandle.of(deviceId, id))
                     .collect(Collectors.toSet());
-            // FIXME: We might be sending a very large read request...
-            return client.read(p4DeviceId, pipeconf)
-                    .handles(cellHandles)
-                    .submitSync()
-                    .all(PiCounterCell.class).stream()
-                    .filter(c -> c.cellId().counterType().equals(PiCounterType.DIRECT))
-                    .collect(Collectors.toMap(
-                            c -> c.cellId().tableEntry().handle(deviceId),
-                            PiCounterCell::data));
+            cells = getFutureWithDeadline(client.readCounterCells(cellIds, pipeconf),
+                                              "reading table counters", Collections.emptyList());
+            return cells.stream()
+                    .collect(Collectors.toMap(c -> c.cellId().tableEntry(), PiCounterCell::data));
         }
     }
 
     private boolean tableHasCounter(PiTableId tableId) {
         return pipelineModel.table(tableId).isPresent() &&
                 !pipelineModel.table(tableId).get().counters().isEmpty();
+    }
+
+    private boolean tableIsConstant(PiTableId tableId) {
+        return pipelineModel.table(tableId).isPresent() &&
+                pipelineModel.table(tableId).get().isConstantTable();
     }
 
     enum Operation {

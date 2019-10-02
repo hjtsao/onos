@@ -24,7 +24,7 @@ import java.util.Objects;
 /**
  * Forwarding objective queue key.
  */
-public class ForwardingObjQueueKey implements ObjectiveQueueKey {
+public class ForwardingObjQueueKey {
     private DeviceId deviceId;
     private int priority;
     private TrafficSelector selector;

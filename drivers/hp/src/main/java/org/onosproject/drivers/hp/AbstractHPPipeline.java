@@ -20,6 +20,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.collect.ImmutableList;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.core.ApplicationId;
@@ -56,17 +57,16 @@ import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.flowobjective.ObjectiveError;
+import org.onosproject.net.group.DefaultGroupKey;
 import org.onosproject.net.group.Group;
+import org.onosproject.net.group.GroupKey;
 import org.onosproject.net.group.GroupService;
 import org.onosproject.net.meter.MeterService;
-import org.onosproject.store.serializers.KryoNamespaces;
 import org.slf4j.Logger;
 
-import java.util.Set;
 import java.util.HashSet;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.onosproject.net.flow.FlowRule.Builder;
@@ -131,8 +131,6 @@ import static org.slf4j.LoggerFactory.getLogger;
  * - Handling of IP Fragments: OFPC_IP_REASM, OFPC_FRAG_REASM - TODO
  *
  * TODO MINOR: include above actions in the lists of unsupported features
- * TODO MINOR: check pre-requites in flow match
- *
  *
  * With current implementation, in case of unsupported features a WARNING message in generated
  * in the ONOS log, but FlowRule is sent anyway to the device.
@@ -165,7 +163,9 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
     protected Device device;
     protected String deviceHwVersion;
     protected KryoNamespace appKryo = new KryoNamespace.Builder()
-            .register(KryoNamespaces.API)
+            .register(GroupKey.class)
+            .register(DefaultGroupKey.class)
+            .register(byte[].class)
             .build("AbstractHPPipeline");
     private ServiceDirectory serviceDirectory;
     private CoreService coreService;
@@ -213,20 +213,18 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
      * Table 0 is just a shortcut to table 100
      * Table 100/200 are respectively used for rules processed in HARDWARE/SOFTWARE
      *
-     * @param selector TrafficSelector including flow match
-     * @param treatment TrafficTreatment including instructions/actions
+     * @param fwd ForwardingObjective
      * @return table id
      */
-    protected abstract int tableIdForForwardingObjective(TrafficSelector selector, TrafficTreatment treatment);
+    protected abstract int tableIdForForwardingObjective(ForwardingObjective fwd);
 
     /**
      * Return TRUE if ForwardingObjective fwd includes unsupported features.
      *
-     * @param selector TrafficSelector including flow match
-     * @param treatment TrafficTreatment including instructions/actions
+     * @param fwd ForwardingObjective
      * @return boolean
      */
-    protected abstract boolean checkUnSupportedFeatures(TrafficSelector selector, TrafficTreatment treatment);
+    protected abstract boolean checkUnSupportedFeatures(ForwardingObjective fwd);
 
     @Override
     public void init(DeviceId deviceId, PipelinerContext context) {
@@ -246,7 +244,7 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
         deviceHwVersion = device.hwVersion();
 
         //Initialization of model specific features
-        log.debug("HP Driver - Initializing unsupported features for switch {}", deviceHwVersion);
+        log.info("HP Driver - Initializing unsupported features for switch {}", deviceHwVersion);
         initUnSupportedFeatures();
 
         log.debug("HP Driver - Initializing features supported in hardware");
@@ -333,12 +331,15 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
         flowRuleService.apply(ops.build(new FlowRuleOperationsContext() {
             @Override
             public void onSuccess(FlowRuleOperations ops) {
-                log.trace("HP Driver: - applyRules onSuccess rule {}", rule);
+                log.trace("HP Driver: provisioned " + rule.toString());
+
+                log.debug("HP Driver: - applyRules onSuccess rule {}", rule.toString());
             }
 
             @Override
             public void onError(FlowRuleOperations ops) {
-                log.trace("HP Driver: applyRules onError rule: " + rule);
+                log.debug("HP Driver: applyRules onError rule: "
+                        + rule.toString() + " in table: " + rule.tableId());
             }
         }));
     }
@@ -361,17 +362,18 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
     public void forward(ForwardingObjective fwd) {
 
         if (fwd.treatment() != null) {
-            /* If UNSUPPORTED features included in ForwardingObjective a warning message is generated.
+            // Deal with SPECIFIC and VERSATILE in the same manner.
+
+            /** If UNSUPPORTED features included in ForwardingObjective a warning message is generated.
              * FlowRule is anyway sent to the device, device will reply with an OFP_ERROR.
              * Moreover, checkUnSupportedFeatures function generates further warnings specifying
              * each unsupported feature.
-             */
-            if (checkUnSupportedFeatures(fwd.selector(), fwd.treatment())) {
+             * */
+            if (checkUnSupportedFeatures(fwd)) {
                 log.warn("HP Driver - specified ForwardingObjective contains UNSUPPORTED FEATURES");
             }
 
-            // Deal with SPECIFIC and VERSATILE in the same manner.
-            // Create the FlowRule starting from the ForwardingObjective
+            //Create the FlowRule starting from the ForwardingObjective
             FlowRule.Builder ruleBuilder = DefaultFlowRule.builder()
                     .forDevice(deviceId)
                     .withSelector(fwd.selector())
@@ -379,8 +381,8 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                     .withPriority(fwd.priority())
                     .fromApp(fwd.appId());
 
-            // Determine the table to be used depends on selector, treatment and specific switch hardware
-            ruleBuilder.forTable(tableIdForForwardingObjective(fwd.selector(), fwd.treatment()));
+            //Table to be used depends on the specific switch hardware and ForwardingObjective
+            ruleBuilder.forTable(tableIdForForwardingObjective(fwd));
 
             if (fwd.permanent()) {
                 ruleBuilder.makePermanent();
@@ -388,7 +390,8 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                 ruleBuilder.makeTemporary(fwd.timeout());
             }
 
-            log.debug("HP Driver - installing ForwadingObjective arrived with treatment {}", fwd);
+            log.debug("HP Driver - installing fwd.treatment {}", fwd.toString());
+
             installObjective(ruleBuilder, fwd);
 
         } else {
@@ -412,19 +415,18 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                     treatment = appKryo.deserialize(next.data());
                 } else {
                     pendingAddNext.invalidate(fwd.nextId());
-                    treatment = getTreatment(nextObjective);
-                    if (treatment == null) {
-                        fwd.context().ifPresent(c -> c.onError(fwd, ObjectiveError.UNSUPPORTED));
-                        return;
-                    }
+                    treatment = nextObjective.next().iterator().next();
                 }
             } else {
                 // We get the NextGroup from the remove operation.
                 // Doing an operation on the store seems to be very expensive.
-                next = flowObjectiveStore.getNextGroup(fwd.nextId());
-                treatment = (next != null) ? appKryo.deserialize(next.data()) : null;
+                next = flowObjectiveStore.removeNextGroup(fwd.nextId());
+                if (next == null) {
+                    fwd.context().ifPresent(c -> c.onError(fwd, ObjectiveError.GROUPMISSING));
+                    return;
+                }
+                treatment = appKryo.deserialize(next.data());
             }
-
             // If the treatment is null we cannot re-build the original flow
             if (treatment == null) {
                 fwd.context().ifPresent(c -> c.onError(fwd, ObjectiveError.GROUPMISSING));
@@ -437,26 +439,11 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                     .fromApp(fwd.appId())
                     .withPriority(fwd.priority())
                     .withTreatment(treatment);
-
-            /* If UNSUPPORTED features included in ForwardingObjective a warning message is generated.
-             * FlowRule is anyway sent to the device, device will reply with an OFP_ERROR.
-             * Moreover, checkUnSupportedFeatures function generates further warnings specifying
-             * each unsupported feature.
-             */
-            if (checkUnSupportedFeatures(fwd.selector(), treatment)) {
-                log.warn("HP Driver - specified ForwardingObjective contains UNSUPPORTED FEATURES");
-            }
-
-            //Table to be used depends on the specific switch hardware and ForwardingObjective
-            ruleBuilder.forTable(tableIdForForwardingObjective(fwd.selector(), treatment));
-
             if (fwd.permanent()) {
                 ruleBuilder.makePermanent();
             } else {
                 ruleBuilder.makeTemporary(fwd.timeout());
             }
-
-            log.debug("HP Driver - installing ForwadingObjective arrived with NULL treatment (intent)");
             installObjective(ruleBuilder, fwd);
         }
     }
@@ -472,15 +459,21 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
 
         switch (objective.op()) {
             case ADD:
-                log.trace("HP Driver - Requested ADD of objective to device " + deviceId);
-                flowBuilder.add(ruleBuilder.build());
+                log.trace("HP Driver - Requested ADD of objective " + objective.toString());
+                FlowRule addRule = ruleBuilder.build();
+
+                log.trace("HP Driver - built rule is " + addRule.toString());
+                flowBuilder.add(addRule);
                 break;
             case REMOVE:
-                log.trace("HP Driver - Requested REMOVE of objective to device " + deviceId);
-                flowBuilder.remove(ruleBuilder.build());
+                log.trace("HP Driver - Requested REMOVE of objective " + objective.toString());
+                FlowRule removeRule = ruleBuilder.build();
+
+                log.trace("HP Driver - built rule is " + removeRule.toString());
+                flowBuilder.remove(removeRule);
                 break;
             default:
-                log.debug("HP Driver - Unknown operation {}", objective.op());
+                log.warn("HP Driver - Unknown operation {}", objective.op());
         }
 
         flowRuleService.apply(flowBuilder.build(new FlowRuleOperationsContext() {
@@ -503,7 +496,6 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
     public void next(NextObjective nextObjective) {
         switch (nextObjective.op()) {
             case ADD:
-                log.debug("HP driver: NextObjective ADDED");
                 // We insert the value in the cache
                 pendingAddNext.put(nextObjective.id(), nextObjective);
                 // Then in the store, this will unblock the queued fwd obj
@@ -513,16 +505,9 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                 );
                 break;
             case REMOVE:
-                log.debug("HP driver: NextObjective REMOVED");
-                NextGroup next = flowObjectiveStore.removeNextGroup(nextObjective.id());
-                if (next == null) {
-                    nextObjective.context().ifPresent(context -> context.onError(nextObjective,
-                            ObjectiveError.GROUPMISSING));
-                    return;
-                }
                 break;
             default:
-                log.debug("Unsupported operation {}", nextObjective.op());
+                log.warn("Unsupported operation {}", nextObjective.op());
         }
         nextObjective.context().ifPresent(context -> context.onSuccess(nextObjective));
     }
@@ -530,7 +515,7 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
     @Override
     public List<String> getNextMappings(NextGroup nextGroup) {
         //TODO: to be implemented
-        return Collections.emptyList();
+        return ImmutableList.of();
     }
 
     @Override
@@ -541,37 +526,6 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
                           filteringObjective.appId());
         } else {
             fail(filteringObjective, ObjectiveError.UNSUPPORTED);
-        }
-    }
-
-    /**
-     * Gets traffic treatment from a next objective.
-     * Merge traffic treatments from next objective if the next objective is
-     * BROADCAST type and contains multiple traffic treatments.
-     * Returns first treatment from next objective if the next objective is
-     * SIMPLE type and it contains only one treatment.
-     *
-     * @param nextObjective the next objective
-     * @return the treatment from next objective; null if not supported
-     */
-    private TrafficTreatment getTreatment(NextObjective nextObjective) {
-        Collection<TrafficTreatment> treatments = nextObjective.next();
-        switch (nextObjective.type()) {
-            case SIMPLE:
-                if (treatments.size() != 1) {
-                    log.error("Next Objectives of type SIMPLE should have only " +
-                                    "one traffic treatment. NexObjective: {}",
-                            nextObjective.toString());
-                    return null;
-                }
-                return treatments.iterator().next();
-            case BROADCAST:
-                TrafficTreatment.Builder builder = DefaultTrafficTreatment.builder();
-                treatments.forEach(builder::addTreatment);
-                return builder.build();
-            default:
-                log.error("Unsupported next objective type {}.", nextObjective.type());
-                return null;
         }
     }
 

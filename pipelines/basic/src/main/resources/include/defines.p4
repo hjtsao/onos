@@ -18,6 +18,7 @@
 #define __DEFINES__
 
 #define ETH_TYPE_IPV4 0x0800
+#define ETH_TYPE_8021Q 0x8100
 #define IP_PROTO_TCP 8w6
 #define IP_PROTO_UDP 8w17
 #define IP_VERSION_4 4w4
@@ -37,14 +38,14 @@
 typedef bit<48> mac_t;
 typedef bit<32> ip_address_t;
 typedef bit<16> l4_port_t;
+
 typedef bit<9>  port_t;
 typedef bit<16> next_hop_id_t;
-
-const port_t CPU_PORT = 255;
+typedef bit<4>  user_pipeline_id_t;
+typedef bit<7>  role_id_t;
 
 typedef bit<8> MeterColor;
 const MeterColor MeterColor_GREEN = 8w0;
 const MeterColor MeterColor_YELLOW = 8w1;
 const MeterColor MeterColor_RED = 8w2;
-
 #endif

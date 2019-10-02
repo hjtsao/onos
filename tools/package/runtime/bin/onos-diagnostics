@@ -61,7 +61,7 @@ CLI_COMMANDS=(
     "feature:repo-list"
     "feature:list"
     "bundle:list"
-    "scr-list"
+    "scr:list"
 
     "summary"
     "nodes"
@@ -109,7 +109,6 @@ CLI_COMMANDS=(
     "sr-next-vlan"
     "sr-next-pw"
     "sr-next-xconnect"
-    "sr-next-mac-vlan"
     "dhcp-relay"
 
     "mcast-host-routes"

@@ -15,31 +15,34 @@
  */
 package org.onosproject.store.core.impl;
 
+import static org.slf4j.LoggerFactory.getLogger;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.store.LogicalTimestamp;
 import org.onosproject.store.Timestamp;
 import org.onosproject.store.service.AtomicCounter;
 import org.onosproject.store.service.LogicalClockService;
 import org.onosproject.store.service.StorageService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.onosproject.security.AppPermission.Type.CLOCK_WRITE;
-import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * LogicalClockService implementation based on a {@link AtomicCounter}.
  */
-@Component(immediate = true, service = LogicalClockService.class)
+@Component(immediate = true)
+@Service
 public class LogicalClockManager implements LogicalClockService {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     private static final String SYSTEM_LOGICAL_CLOCK_COUNTER_NAME = "sys-clock-counter";

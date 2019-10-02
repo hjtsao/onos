@@ -15,13 +15,33 @@
 */
 package org.onosproject.store.flow.impl;
 
+import java.util.Collections;
+import java.util.Dictionary;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
-import org.onlab.util.OrderedExecutor;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
@@ -72,32 +92,9 @@ import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import java.util.Collections;
-import java.util.Dictionary;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 import static com.google.common.base.Strings.isNullOrEmpty;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.net.flow.FlowRuleEvent.Type.RULE_REMOVED;
@@ -110,90 +107,88 @@ import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.REM
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.REMOVE_FLOW_ENTRY;
 import static org.slf4j.LoggerFactory.getLogger;
 
-import static org.onosproject.store.OsgiPropertyConstants.*;
-
 /**
  * Manages inventory of flow rules using a distributed state management protocol.
  */
-@Component(
-        immediate = true,
-        service = FlowRuleStore.class,
-        property = {
-                MESSAGE_HANDLER_THREAD_POOL_SIZE + ":Integer=" + MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT,
-                BACKUP_PERIOD_MILLIS + ":Integer=" + BACKUP_PERIOD_MILLIS_DEFAULT,
-                ANTI_ENTROPY_PERIOD_MILLIS + ":Integer=" + ANTI_ENTROPY_PERIOD_MILLIS_DEFAULT,
-                EC_FLOW_RULE_STORE_PERSISTENCE_ENABLED + ":Boolean=" + EC_FLOW_RULE_STORE_PERSISTENCE_ENABLED_DEFAULT,
-                MAX_BACKUP_COUNT + ":Integer=" + MAX_BACKUP_COUNT_DEFAULT
-        }
-)
+@Component(immediate = true)
+@Service
 public class ECFlowRuleStore
     extends AbstractStore<FlowRuleBatchEvent, FlowRuleStoreDelegate>
     implements FlowRuleStore {
 
     private final Logger log = getLogger(getClass());
 
+    private static final int MESSAGE_HANDLER_THREAD_POOL_SIZE = 8;
+    private static final int DEFAULT_MAX_BACKUP_COUNT = 2;
+    private static final boolean DEFAULT_PERSISTENCE_ENABLED = false;
+    private static final int DEFAULT_BACKUP_PERIOD_MILLIS = 2000;
+    private static final int DEFAULT_ANTI_ENTROPY_PERIOD_MILLIS = 5000;
     private static final long FLOW_RULE_STORE_TIMEOUT_MILLIS = 5000;
 
-    /** Number of threads in the message handler pool. */
-    private int msgHandlerPoolSize = MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT;
+    @Property(name = "msgHandlerPoolSize", intValue = MESSAGE_HANDLER_THREAD_POOL_SIZE,
+        label = "Number of threads in the message handler pool")
+    private int msgHandlerPoolSize = MESSAGE_HANDLER_THREAD_POOL_SIZE;
 
-    /** Delay in ms between successive backup runs. */
-    private int backupPeriod = BACKUP_PERIOD_MILLIS_DEFAULT;
+    @Property(name = "backupPeriod", intValue = DEFAULT_BACKUP_PERIOD_MILLIS,
+        label = "Delay in ms between successive backup runs")
+    private int backupPeriod = DEFAULT_BACKUP_PERIOD_MILLIS;
 
-    /** Delay in ms between anti-entropy runs. */
-    private int antiEntropyPeriod = ANTI_ENTROPY_PERIOD_MILLIS_DEFAULT;
+    @Property(name = "antiEntropyPeriod", intValue = DEFAULT_ANTI_ENTROPY_PERIOD_MILLIS,
+        label = "Delay in ms between anti-entropy runs")
+    private int antiEntropyPeriod = DEFAULT_ANTI_ENTROPY_PERIOD_MILLIS;
 
-    /** Indicates whether or not changes in the flow table should be persisted to disk. */
-    private boolean persistenceEnabled = EC_FLOW_RULE_STORE_PERSISTENCE_ENABLED_DEFAULT;
+    @Property(name = "persistenceEnabled", boolValue = false,
+        label = "Indicates whether or not changes in the flow table should be persisted to disk.")
+    private boolean persistenceEnabled = DEFAULT_PERSISTENCE_ENABLED;
 
-    /** Max number of backup copies for each device. */
-    private volatile int backupCount = MAX_BACKUP_COUNT_DEFAULT;
+    @Property(name = "backupCount", intValue = DEFAULT_MAX_BACKUP_COUNT,
+        label = "Max number of backup copies for each device")
+    private volatile int backupCount = DEFAULT_MAX_BACKUP_COUNT;
 
     private InternalFlowTable flowTable = new InternalFlowTable();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ReplicaInfoService replicaInfoManager;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterCommunicationService clusterCommunicator;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService configService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PersistenceService persistenceService;
 
     private Map<Long, NodeId> pendingResponses = Maps.newConcurrentMap();
     private ExecutorService messageHandlingExecutor;
     private ExecutorService eventHandler;
 
-    private ScheduledExecutorService backupScheduler;
-    private ExecutorService backupExecutor;
+    private final ScheduledExecutorService backupSenderExecutor =
+        Executors.newSingleThreadScheduledExecutor(groupedThreads("onos/flow", "backup-sender", log));
 
     private EventuallyConsistentMap<DeviceId, List<TableStatisticsEntry>> deviceTableStats;
     private final EventuallyConsistentMapListener<DeviceId, List<TableStatisticsEntry>> tableStatsListener =
         new InternalTableStatsListener();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     protected final Serializer serializer = Serializer.using(KryoNamespace.newBuilder()
         .register(KryoNamespaces.API)
         .register(BucketId.class)
         .register(FlowBucket.class)
-        .register(ImmutablePair.class)
         .build());
 
     protected final KryoNamespace.Builder serializerBuilder = KryoNamespace.newBuilder()
@@ -209,12 +204,6 @@ public class ECFlowRuleStore
     @Activate
     public void activate(ComponentContext context) {
         configService.registerProperties(getClass());
-
-        backupScheduler = Executors.newSingleThreadScheduledExecutor(
-            groupedThreads("onos/flow", "backup-scheduler", log));
-        backupExecutor = Executors.newFixedThreadPool(
-            max(min(Runtime.getRuntime().availableProcessors() * 2, 16), 4),
-            groupedThreads("onos/flow", "backup-%d", log));
 
         idGenerator = coreService.getIdGenerator(FlowRuleService.FLOW_OP_TOPIC);
 
@@ -256,10 +245,7 @@ public class ECFlowRuleStore
         deviceTableStats.destroy();
         eventHandler.shutdownNow();
         messageHandlingExecutor.shutdownNow();
-        backupScheduler.shutdownNow();
-        backupExecutor.shutdownNow();
-        backupScheduler = null;
-        backupExecutor = null;
+        backupSenderExecutor.shutdownNow();
         log.info("Stopped");
     }
 
@@ -280,19 +266,19 @@ public class ECFlowRuleStore
             String s = get(properties, "msgHandlerPoolSize");
             newPoolSize = isNullOrEmpty(s) ? msgHandlerPoolSize : Integer.parseInt(s.trim());
 
-            s = get(properties, BACKUP_PERIOD_MILLIS);
+            s = get(properties, "backupPeriod");
             newBackupPeriod = isNullOrEmpty(s) ? backupPeriod : Integer.parseInt(s.trim());
 
-            s = get(properties, MAX_BACKUP_COUNT);
+            s = get(properties, "backupCount");
             newBackupCount = isNullOrEmpty(s) ? backupCount : Integer.parseInt(s.trim());
 
-            s = get(properties, ANTI_ENTROPY_PERIOD_MILLIS);
+            s = get(properties, "antiEntropyPeriod");
             newAntiEntropyPeriod = isNullOrEmpty(s) ? antiEntropyPeriod : Integer.parseInt(s.trim());
         } catch (NumberFormatException | ClassCastException e) {
-            newPoolSize = MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT;
-            newBackupPeriod = BACKUP_PERIOD_MILLIS_DEFAULT;
-            newBackupCount = MAX_BACKUP_COUNT_DEFAULT;
-            newAntiEntropyPeriod = ANTI_ENTROPY_PERIOD_MILLIS_DEFAULT;
+            newPoolSize = MESSAGE_HANDLER_THREAD_POOL_SIZE;
+            newBackupPeriod = DEFAULT_BACKUP_PERIOD_MILLIS;
+            newBackupCount = DEFAULT_MAX_BACKUP_COUNT;
+            newAntiEntropyPeriod = DEFAULT_ANTI_ENTROPY_PERIOD_MILLIS;
         }
 
         if (newBackupPeriod != backupPeriod) {
@@ -330,11 +316,8 @@ public class ECFlowRuleStore
             GET_FLOW_ENTRY, serializer::decode, flowTable::getFlowEntry, serializer::encode, executor);
         clusterCommunicator.addSubscriber(
             GET_DEVICE_FLOW_ENTRIES, serializer::decode, flowTable::getFlowEntries, serializer::encode, executor);
-        clusterCommunicator.<Pair<DeviceId, FlowEntryState>, Integer>addSubscriber(
-            GET_DEVICE_FLOW_COUNT,
-            serializer::decode,
-            p -> flowTable.getFlowRuleCount(p.getLeft(), p.getRight()),
-            serializer::encode, executor);
+        clusterCommunicator.addSubscriber(
+            GET_DEVICE_FLOW_COUNT, serializer::decode, flowTable::getFlowRuleCount, serializer::encode, executor);
         clusterCommunicator.addSubscriber(
             REMOVE_FLOW_ENTRY, serializer::decode, this::removeFlowRuleInternal, serializer::encode, executor);
     }
@@ -363,11 +346,6 @@ public class ECFlowRuleStore
 
     @Override
     public int getFlowRuleCount(DeviceId deviceId) {
-        return getFlowRuleCount(deviceId, null);
-    }
-
-    @Override
-    public int getFlowRuleCount(DeviceId deviceId, FlowEntryState state) {
         NodeId master = mastershipService.getMasterFor(deviceId);
         if (master == null) {
             log.debug("Failed to getFlowRuleCount: No master for {}", deviceId);
@@ -375,19 +353,19 @@ public class ECFlowRuleStore
         }
 
         if (Objects.equals(local, master)) {
-            return flowTable.getFlowRuleCount(deviceId, state);
+            return flowTable.getFlowRuleCount(deviceId);
         }
 
         log.trace("Forwarding getFlowRuleCount to master {} for device {}", master, deviceId);
         return Tools.futureGetOrElse(clusterCommunicator.sendAndReceive(
-                Pair.of(deviceId, state),
-                GET_DEVICE_FLOW_COUNT,
-                serializer::encode,
-                serializer::decode,
-                master),
-                FLOW_RULE_STORE_TIMEOUT_MILLIS,
-                TimeUnit.MILLISECONDS,
-                0);
+            deviceId,
+            GET_DEVICE_FLOW_COUNT,
+            serializer::encode,
+            serializer::decode,
+            master),
+            FLOW_RULE_STORE_TIMEOUT_MILLIS,
+            TimeUnit.MILLISECONDS,
+            0);
     }
 
     @Override
@@ -526,12 +504,10 @@ public class ECFlowRuleStore
                 switch (op.operator()) {
                     case ADD:
                         entry = new DefaultFlowEntry(op.target());
-                        log.debug("Adding flow rule: {}", entry);
                         flowTable.add(entry);
                         return op;
                     case MODIFY:
                         entry = new DefaultFlowEntry(op.target());
-                        log.debug("Updating flow rule: {}", entry);
                         flowTable.update(entry);
                         return op;
                     case REMOVE:
@@ -640,7 +616,6 @@ public class ECFlowRuleStore
     private FlowRuleEvent removeFlowRuleInternal(FlowEntry rule) {
         // This is where one could mark a rule as removed and still keep it in the store.
         final FlowEntry removed = flowTable.remove(rule);
-        log.debug("Removed flow rule: {}", removed);
         // rule may be partial rule that is missing treatment, we should use rule from store instead
         return removed != null ? new FlowRuleEvent(RULE_REMOVED, removed) : null;
     }
@@ -717,8 +692,7 @@ public class ECFlowRuleStore
                 clusterService,
                 clusterCommunicator,
                 new InternalLifecycleManager(id),
-                backupScheduler,
-                new OrderedExecutor(backupExecutor),
+                backupSenderExecutor,
                 backupPeriod,
                 antiEntropyPeriod));
         }
@@ -754,8 +728,7 @@ public class ECFlowRuleStore
                 clusterService,
                 clusterCommunicator,
                 new InternalLifecycleManager(deviceId),
-                backupScheduler,
-                new OrderedExecutor(backupExecutor),
+                backupSenderExecutor,
                 backupPeriod,
                 antiEntropyPeriod));
         }
@@ -768,23 +741,6 @@ public class ECFlowRuleStore
          */
         public int getFlowRuleCount(DeviceId deviceId) {
             return getFlowTable(deviceId).count();
-        }
-
-        /**
-         * Returns the count of flow rules in the given state for the given device.
-         *
-         * @param deviceId the device for which to return the flow rule count
-         * @return the flow rule count for the given device
-         */
-        public int getFlowRuleCount(DeviceId deviceId, FlowEntryState state) {
-            if (state == null) {
-                return getFlowRuleCount(deviceId);
-            }
-            return (int) getFlowTable(deviceId)
-                .getFlowEntries()
-                .stream()
-                .filter(rule -> rule.state() == state)
-                .count();
         }
 
         /**
@@ -986,7 +942,7 @@ public class ECFlowRuleStore
             if (replicaInfo != null && replicaInfo.term() == term) {
                 NodeId master = replicaInfo.master().orElse(null);
                 List<NodeId> backups = replicaInfo.backups()
-                    .subList(0, min(replicaInfo.backups().size(), backupCount));
+                    .subList(0, Math.min(replicaInfo.backups().size(), backupCount));
                 listenerRegistry.process(new LifecycleEvent(
                     LifecycleEvent.Type.TERM_ACTIVE,
                     new DeviceReplicaInfo(term, master, backups)));
@@ -1020,7 +976,7 @@ public class ECFlowRuleStore
         private DeviceReplicaInfo toDeviceReplicaInfo(ReplicaInfo replicaInfo) {
             NodeId master = replicaInfo.master().orElse(null);
             List<NodeId> backups = replicaInfo.backups()
-                .subList(0, min(replicaInfo.backups().size(), backupCount));
+                .subList(0, Math.min(replicaInfo.backups().size(), backupCount));
             return new DeviceReplicaInfo(replicaInfo.term(), master, backups);
         }
 
@@ -1028,16 +984,6 @@ public class ECFlowRuleStore
         public void close() {
             replicaInfoManager.removeListener(this);
             mastershipTermLifecycles.removeListener(this);
-        }
-    }
-
-    private static class CountMessage {
-        private final DeviceId deviceId;
-        private final FlowEntryState state;
-
-        CountMessage(DeviceId deviceId, FlowEntryState state) {
-            this.deviceId = deviceId;
-            this.state = state;
         }
     }
 }

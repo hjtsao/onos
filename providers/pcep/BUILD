@@ -16,8 +16,6 @@ onos_app(
     required_apps = [
         "org.onosproject.pcep-api",
         "org.onosproject.optical-model",
-        "org.onosproject.tunnel",
-        "org.onosproject.bgp",
     ],
     title = "PCEP Provider",
     url = "http://onosproject.org",

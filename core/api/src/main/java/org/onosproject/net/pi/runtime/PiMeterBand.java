@@ -26,7 +26,7 @@ import static com.google.common.base.MoreObjects.toStringHelper;
  * Represents a band used within a meter.
  */
 @Beta
-public final class PiMeterBand {
+public class PiMeterBand {
     private final long rate;
     private final long burst;
 

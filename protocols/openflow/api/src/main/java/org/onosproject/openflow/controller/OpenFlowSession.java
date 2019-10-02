@@ -60,17 +60,5 @@ public interface OpenFlowSession {
      */
     CharSequence sessionInfo();
 
-    /**
-     * Add classifier to runtime store of classifiers.
-     *
-     * @param classifier the OpenFlow classifier to add
-     */
-    void addClassifier(OpenFlowClassifier classifier);
 
-    /**
-     * Remove classifier from runtime store of classifiers.
-     *
-     * @param classifier the OpenFlow classifier to remove
-     */
-    void removeClassifier(OpenFlowClassifier classifier);
 }

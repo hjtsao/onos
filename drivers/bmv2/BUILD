@@ -4,16 +4,16 @@ COMPILE_DEPS = CORE_DEPS + KRYO + JACKSON + [
     "//pipelines/basic:onos-pipelines-basic",
     "//protocols/p4runtime/api:onos-protocols-p4runtime-api",
     "//protocols/p4runtime/model:onos-protocols-p4runtime-model",
-    "//deps:io_grpc_grpc_api_context",
-    "//deps:io_grpc_grpc_netty",
+    "@io_grpc_grpc_java//core",
+    "@io_grpc_grpc_java//netty",
     "@minimal_json//jar",
     # "//protocols/bmv2/thrift-api:onos-protocols-bmv2-thrift-api",
-    #"//deps:libthrift",
+    #"//lib:libthrift",
 ]
 
 BUNDLES = [
     ":onos-drivers-bmv2",
-    # "//deps:libthrift",
+    # "//lib:libthrift",
     # "//protocols/bmv2/thrift-api:onos-protocols-bmv2-thrift-api",
 ]
 
@@ -35,8 +35,8 @@ onos_app(
     description = "Adds support for BMv2 devices.",
     included_bundles = BUNDLES,
     required_apps = [
-        "org.onosproject.drivers.stratum",
         "org.onosproject.drivers.p4runtime",
+        "org.onosproject.drivers.gnmi",
         "org.onosproject.pipelines.basic",
     ],
     title = "BMv2 Drivers",

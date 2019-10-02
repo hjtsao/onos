@@ -15,6 +15,12 @@
  */
 package org.onosproject.net.driver.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.ItemNotFoundException;
 import org.onosproject.net.AbstractProjectableModel;
 import org.onosproject.net.Device;
@@ -32,11 +38,6 @@ import org.onosproject.net.driver.DriverRegistry;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.pi.model.PiPipeconfId;
 import org.onosproject.net.pi.service.PiPipeconfService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,10 +53,10 @@ import static org.onosproject.security.AppPermission.Type.DRIVER_WRITE;
 /**
  * Manages inventory of device drivers.
  */
-
+@Service
 // Not enabled by default to allow the DriverRegistryManager to enable it only
 // when all the required drivers are available.
-@Component(immediate = true, enabled = false, service = DriverService.class)
+@Component(immediate = true, enabled = false)
 public class DriverManager implements DriverService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -63,16 +64,16 @@ public class DriverManager implements DriverService {
     private static final String NO_DRIVER = "Driver not found";
     private static final String NO_DEVICE = "Device not found";
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverRegistry registry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigService networkConfigService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PiPipeconfService pipeconfService;
 
     @Activate
@@ -121,12 +122,9 @@ public class DriverManager implements DriverService {
 
         // Special processing for devices with pipeconf.
         if (pipeconfService.ofDevice(deviceId).isPresent()) {
-            // No fallback for pipeconf merged drivers.
-            // Throws exception if pipeconf driver does not exist.
-            return nullIsNotFound(
-                    getPipeconfMergedDriver(deviceId),
-                    "Device is pipeconf-capable but a " +
-                            "pipeconf-merged driver was not found");
+            // No fallback for pipeconf merged drivers. Returns null if driver
+            // does not exist.
+            return getPipeconfMergedDriver(deviceId);
         }
 
         // Primary source of driver configuration is the network config.

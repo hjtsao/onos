@@ -25,21 +25,16 @@ rm -f $CATALOG
 export SHLVL=1
 
 function writeCatalog {
-    if ! bazel build $* --aspects tools/build/bazel/publish_catalog.bzl%publish_catalog >/tmp/onos.catalog.bazel.out 2>&1; then
-        echo Bazel build of catalog failed
-        cat /tmp/onos.catalog.bazel.out
-        exit 1
-    fi
-
-    egrep "^DEBUG: .*/publish_catalog.bzl:" /tmp/onos.catalog.bazel.out | cut -d\  -f3- >> $CATALOG
+    bazel build $* --aspects tools/build/bazel/publish_catalog.bzl%publish_catalog 2>&1 \
+        | egrep "^DEBUG: .*/publish_catalog.bzl:" | cut -d\  -f3- >> $CATALOG
 }
 
 function jars {
-    egrep -v '(\#|build/conf)' tools/build/publish-target-list
+    egrep -v '(\# |grpc/api|build/conf)' tools/build/publish-target-list
 }
 
 function testJars {
-    egrep -v '(\#|build/conf)' tools/build/publish-test-target-list
+    egrep -v '(# |grpc/api|build/conf)' tools/build/publish-test-target-list
 }
 
 echo "Cataloging jar files..."
@@ -48,15 +43,14 @@ writeCatalog $(jars)
 echo "Cataloging test jars..."
 writeCatalog $(testJars)
 
-echo "Cataloging pom files..."
-writeCatalog $(jars | sed 's/$/-pom/')
-
 [ $libsOnly = true ] && exit 0
 
 echo "Cataloging source jars..."
 writeCatalog $(jars | sed 's/$/-sources/')
 echo "Cataloging javadoc jars..."
 writeCatalog $(jars | sed 's/$/-javadoc/')
+echo "Cataloging pom files..."
+writeCatalog $(jars | sed 's/$/-pom/')
 
 echo "Cataloging oar files..."
 writeCatalog $(bazel query 'kind("_onos_oar rule", //...)')
@@ -67,6 +61,7 @@ VERSION=$(egrep ONOS_VERSION tools/build/bazel/variables.bzl | cut -d\" -f2)
 # Inject the onos-dependencies pom, ONOS tar, admin tar and test tar.
 echo "Cataloging tar files..."
 cat >> $CATALOG <<EOF
+lib/pom.xml	org/onosproject/onos-dependencies/$VERSION/onos-dependencies-$VERSION.pom
 bazel-bin/onos.tar.gz	org/onosproject/onos-releases/$VERSION/onos-$VERSION.tar.gz
 bazel-bin/onos-admin.tar.gz	org/onosproject/onos-releases/$VERSION/onos-admin-$VERSION.tar.gz
 bazel-bin/onos-test.tar.gz	org/onosproject/onos-releases/$VERSION/onos-test-$VERSION.tar.gz

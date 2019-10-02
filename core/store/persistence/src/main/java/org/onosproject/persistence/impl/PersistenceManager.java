@@ -16,14 +16,15 @@
 
 package org.onosproject.persistence.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.mapdb.DB;
 import org.mapdb.DBMaker;
 import org.onosproject.persistence.PersistenceService;
 import org.onosproject.persistence.PersistentMapBuilder;
 import org.onosproject.persistence.PersistentSetBuilder;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 
 import java.io.File;
@@ -43,7 +44,8 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Service that maintains local disk backed maps and sets.
  * This implementation automatically deletes empty structures on shutdown.
  */
-@Component(immediate = true, service = PersistenceService.class)
+@Component(immediate = true)
+@Service
 public class PersistenceManager implements PersistenceService {
 
     private static final String DATABASE_ROOT =

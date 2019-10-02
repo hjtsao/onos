@@ -1,4 +1,2 @@
 .vagrant
 *.ova
-*.log
-tmp/

@@ -50,10 +50,6 @@ public interface TunnelDescription extends Description, Annotated {
          */
         GRE,
         /**
-         * Signifies that this is a L3 tunnel.
-         */
-        GENEVE,
-        /**
          * Signifies that this is a L1 OTN tunnel.
          */
         ODUK,

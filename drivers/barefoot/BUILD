@@ -15,10 +15,9 @@ osgi_jar(
 onos_app(
     app_name = "org.onosproject.drivers.barefoot",
     category = "Drivers",
-    description = "Adds support for switches based on Barefoot Networks ASICs",
+    description = "Adds support for Barefoot Networks devices",
     included_bundles = BUNDLES,
     required_apps = [
-        "org.onosproject.drivers.stratum",
         "org.onosproject.drivers.p4runtime",
     ],
     title = "Barefoot Drivers",

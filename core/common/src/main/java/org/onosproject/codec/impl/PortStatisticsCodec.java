@@ -32,7 +32,7 @@ public final class PortStatisticsCodec extends AnnotatedCodec<PortStatistics> {
         checkNotNull(entry, "Port Statistics cannot be null");
 
         final ObjectNode result = context.mapper().createObjectNode()
-                .put("port", entry.portNumber().toLong())
+                .put("port", entry.port())
                 .put("packetsReceived", entry.packetsReceived())
                 .put("packetsSent", entry.packetsSent())
                 .put("bytesReceived", entry.bytesReceived())

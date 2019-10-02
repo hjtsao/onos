@@ -16,29 +16,31 @@
 
 package org.onosproject.store.atomix.primitives.impl;
 
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import io.atomix.cluster.MemberId;
 import io.atomix.primitive.partition.PartitionGroup;
 import io.atomix.protocols.raft.MultiRaftProtocol;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.PartitionId;
 import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.store.atomix.impl.AtomixManager;
+import org.onosproject.store.primitives.DistributedPrimitiveCreator;
 import org.onosproject.store.primitives.PartitionAdminService;
 import org.onosproject.store.primitives.PartitionEvent;
 import org.onosproject.store.primitives.PartitionEventListener;
 import org.onosproject.store.primitives.PartitionService;
 import org.onosproject.store.service.PartitionClientInfo;
 import org.onosproject.store.service.PartitionInfo;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
-
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.onosproject.security.AppPermission.Type.PARTITION_READ;
@@ -47,13 +49,14 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Implementation of {@code PartitionService} and {@code PartitionAdminService}.
  */
-@Component(service = { PartitionService.class, PartitionAdminService.class })
+@Component
+@Service
 public class PartitionManager extends AbstractListenerManager<PartitionEvent, PartitionEventListener>
     implements PartitionService, PartitionAdminService {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected AtomixManager atomixManager;
 
     private PartitionGroup partitionGroup;
@@ -86,6 +89,12 @@ public class PartitionManager extends AbstractListenerManager<PartitionEvent, Pa
     }
 
     @Override
+    public DistributedPrimitiveCreator getDistributedPrimitiveCreator(PartitionId partitionId) {
+        checkPermission(PARTITION_READ);
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Set<NodeId> getConfiguredMembers(PartitionId partitionId) {
         checkPermission(PARTITION_READ);
         io.atomix.primitive.partition.PartitionId atomixPartitionId =
@@ -94,6 +103,14 @@ public class PartitionManager extends AbstractListenerManager<PartitionEvent, Pa
             .stream()
             .map(member -> NodeId.nodeId(member.id()))
             .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Set<NodeId> getActiveMembersMembers(PartitionId partitionId) {
+        checkPermission(PARTITION_READ);
+        // TODO: This needs to query metadata to determine currently active
+        // members of partition
+        return getConfiguredMembers(partitionId);
     }
 
     @Override

@@ -16,7 +16,26 @@
 
 package org.onosproject.provider.of.group.impl;
 
-import com.google.common.collect.Maps;
+import static org.onlab.util.Tools.getIntegerProperty;
+import static org.slf4j.LoggerFactory.getLogger;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Dictionary;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.util.ItemNotFoundException;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.GroupId;
@@ -47,12 +66,6 @@ import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.RoleState;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.projectfloodlight.openflow.protocol.OFBucketCounter;
 import org.projectfloodlight.openflow.protocol.OFCapabilities;
 import org.projectfloodlight.openflow.protocol.OFErrorMsg;
@@ -73,56 +86,43 @@ import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.errormsg.OFGroupModFailedErrorMsg;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Dictionary;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.onlab.util.Tools.getIntegerProperty;
-import static org.onosproject.provider.of.group.impl.OsgiPropertyConstants.POLL_FREQUENCY;
-import static org.onosproject.provider.of.group.impl.OsgiPropertyConstants.POLL_FREQUENCY_DEFAULT;
-import static org.slf4j.LoggerFactory.getLogger;
+import com.google.common.collect.Maps;
 
 /**
  * Provider which uses an OpenFlow controller to handle Group.
  */
-@Component(immediate = true,
-        property = {
-            POLL_FREQUENCY + ":Integer=" + POLL_FREQUENCY_DEFAULT,
-        })
+@Component(immediate = true)
 public class OpenFlowGroupProvider extends AbstractProvider implements GroupProvider {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected OpenFlowController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected GroupProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverService driverService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected GroupService groupService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
 
     private GroupProviderService providerService;
 
+    private static final int DEFAULT_POLL_INTERVAL = 10;
     private static final String COMPONENT = "org.onosproject.provider.of.group.impl.OpenFlowGroupProvider";
+    private static final String GROUP_POLL_INTERVAL_CONST = "groupPollInterval";
 
-    /** Frequency (in seconds) for polling group statistics. */
-    private int groupPollInterval = POLL_FREQUENCY_DEFAULT;
+    @Property(name = "groupPollInterval", intValue = DEFAULT_POLL_INTERVAL,
+            label = "Frequency (in seconds) for polling group statistics")
+    private int groupPollInterval = DEFAULT_POLL_INTERVAL;
 
     private final InternalGroupProvider listener = new InternalGroupProvider();
 
@@ -175,7 +175,7 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
     @Modified
     public void modified(ComponentContext context) {
         Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
-        Integer newGroupPollInterval = getIntegerProperty(properties, POLL_FREQUENCY);
+        Integer newGroupPollInterval = getIntegerProperty(properties, GROUP_POLL_INTERVAL_CONST);
         if (newGroupPollInterval != null && newGroupPollInterval > 0
                 && newGroupPollInterval != groupPollInterval) {
             groupPollInterval = newGroupPollInterval;
@@ -183,7 +183,7 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
         } else if (newGroupPollInterval != null && newGroupPollInterval <= 0) {
             log.warn("groupPollInterval must be greater than 0");
             //If the new value <= 0 reset property with old value.
-            cfgService.setProperty(COMPONENT, POLL_FREQUENCY, Integer.toString(groupPollInterval));
+            cfgService.setProperty(COMPONENT, GROUP_POLL_INTERVAL_CONST, Integer.toString(groupPollInterval));
         }
     }
 
@@ -200,21 +200,6 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
                 log.error("SW {} is not found", dpid);
                 return;
             }
-
-            switch (groupOperation.groupType()) {
-                case SELECT:
-                case INDIRECT:
-                case ALL:
-                case FAILOVER:
-                    break;
-                case CLONE:
-                default:
-                    log.warn("Group type {} not supported, ignoring operation [{}]",
-                             groupOperation.groupType(), groupOperation);
-                    //  Next groupOperation.
-                    continue;
-            }
-
             final Long groupModXid = XID_COUNTER.getAndIncrement();
             GroupModBuilder builder = null;
             if (driverService == null) {

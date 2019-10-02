@@ -19,6 +19,7 @@ import java.util.Collection;
 
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.PartitionId;
+import org.onosproject.store.service.DistributedPrimitive.Status;
 
 import com.google.common.collect.ImmutableList;
 
@@ -52,5 +53,25 @@ public class PartitionClientInfo {
      */
     public Collection<NodeId> servers() {
         return servers;
+    }
+
+    /**
+     * Return the sessionId for the partition client.
+     * @return session id
+     * @deprecated in Loon release (1.11.0)
+     */
+    @Deprecated
+    public long sessionId() {
+        return 0;
+    }
+
+    /**
+     * Returns the current status for the client session.
+     * @return status
+     * @deprecated in Loon release (1.11.0)
+     */
+    @Deprecated
+    public Status status() {
+        return null;
     }
 }

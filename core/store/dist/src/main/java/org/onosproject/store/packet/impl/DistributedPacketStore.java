@@ -16,6 +16,14 @@
 package org.onosproject.store.packet.impl;
 
 import com.google.common.collect.Lists;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
@@ -38,12 +46,6 @@ import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Versioned;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Collection;
@@ -59,21 +61,14 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.store.OsgiPropertyConstants.DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE;
-import static org.onosproject.store.OsgiPropertyConstants.DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Distributed packet store implementation allowing packets to be sent to
  * remote instances.
  */
-@Component(
-        immediate = true,
-        service = PacketStore.class,
-        property = {
-                DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE + ":Integer=" + DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT
-        }
-)
+@Component(immediate = true)
+@Service
 public class DistributedPacketStore
         extends AbstractStore<PacketEvent, PacketStoreDelegate>
         implements PacketStore {
@@ -82,19 +77,19 @@ public class DistributedPacketStore
 
     private static final String FORMAT = "Setting: messageHandlerThreadPoolSize={}";
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterCommunicationService communicationService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
 
     private PacketRequestTracker tracker;
@@ -106,8 +101,10 @@ public class DistributedPacketStore
 
     private ExecutorService messageHandlingExecutor;
 
-    /** Size of thread pool to assign message handler. */
-    private static int messageHandlerThreadPoolSize = DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE_DEFAULT;
+    private static final int DEFAULT_MESSAGE_HANDLER_THREAD_POOL_SIZE = 4;
+    @Property(name = "messageHandlerThreadPoolSize", intValue = DEFAULT_MESSAGE_HANDLER_THREAD_POOL_SIZE,
+            label = "Size of thread pool to assign message handler")
+    private static int messageHandlerThreadPoolSize = DEFAULT_MESSAGE_HANDLER_THREAD_POOL_SIZE;
 
     private static final int MAX_BACKOFF = 50;
 
@@ -147,7 +144,7 @@ public class DistributedPacketStore
         int newMessageHandlerThreadPoolSize;
 
         try {
-            String s = get(properties, DPS_MESSAGE_HANDLER_THREAD_POOL_SIZE);
+            String s = get(properties, "messageHandlerThreadPoolSize");
 
             newMessageHandlerThreadPoolSize =
                     isNullOrEmpty(s) ? messageHandlerThreadPoolSize : Integer.parseInt(s.trim());

@@ -15,12 +15,24 @@
  */
 package org.onosproject.store.device.impl;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.Futures;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.ChassisId;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cluster.ClusterService;
@@ -61,24 +73,14 @@ import org.onosproject.store.service.SetEvent;
 import org.onosproject.store.service.SetEventListener;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Futures;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
@@ -99,6 +101,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Manages the inventory of devices using a {@code EventuallyConsistentMap}.
  */
 //@Component(immediate = true, enabled = false)
+@Service
 public class ECDeviceStore
     extends AbstractStore<DeviceEvent, DeviceStoreDelegate>
     implements DeviceStore {
@@ -118,22 +121,22 @@ public class ECDeviceStore
 
     private DistributedSet<DeviceId> availableDevices;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipTermService mastershipTermService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceClockService deviceClockService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterCommunicationService clusterCommunicator;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
     private NodeId localNodeId;
@@ -534,7 +537,7 @@ public class ECDeviceStore
 
         if (prvStatsMap != null) {
             for (PortStatistics newStats : newStatsCollection) {
-                PortNumber port = newStats.portNumber();
+                PortNumber port = PortNumber.portNumber(newStats.port());
                 PortStatistics prvStats = prvStatsMap.get(port);
                 DefaultPortStatistics.Builder builder = DefaultPortStatistics.builder();
                 PortStatistics deltaStats = builder.build();
@@ -546,7 +549,7 @@ public class ECDeviceStore
             }
         } else {
             for (PortStatistics newStats : newStatsCollection) {
-                PortNumber port = newStats.portNumber();
+                PortNumber port = PortNumber.portNumber(newStats.port());
                 newStatsMap.put(port, newStats);
             }
         }
@@ -576,7 +579,7 @@ public class ECDeviceStore
         }
         DefaultPortStatistics.Builder builder = DefaultPortStatistics.builder();
         DefaultPortStatistics deltaStats = builder.setDeviceId(deviceId)
-                .setPort(newStats.portNumber())
+                .setPort(newStats.port())
                 .setPacketsReceived(newStats.packetsReceived() - prvStats.packetsReceived())
                 .setPacketsSent(newStats.packetsSent() - prvStats.packetsSent())
                 .setBytesReceived(newStats.bytesReceived() - prvStats.bytesReceived())

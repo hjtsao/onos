@@ -18,6 +18,12 @@ package org.onosproject.net.domain.impl;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.ItemNotFoundException;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.behaviour.DomainIntentConfigurable;
@@ -28,11 +34,6 @@ import org.onosproject.net.domain.DomainIntentOperations;
 import org.onosproject.net.domain.DomainIntentService;
 import org.onosproject.net.driver.DriverHandler;
 import org.onosproject.net.driver.DriverService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,15 +52,16 @@ import static org.onosproject.net.domain.DomainIntentOperation.Type.REMOVE;
 /**
  * {@link DomainIntentService} implementation class.
  */
-@Component(immediate = true, service = DomainIntentService.class)
+@Component(immediate = true)
+@Service
 public class DomainIntentManager implements DomainIntentService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverService driverService;
 
     private ExecutorService executorService =

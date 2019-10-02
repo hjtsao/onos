@@ -37,7 +37,7 @@ public class OFDescStatsReplyAdapter implements OFDescStatsReply {
 
     @Override
     public OFType getType() {
-        return OFType.STATS_REPLY;
+        return null;
     }
 
     @Override
@@ -47,7 +47,7 @@ public class OFDescStatsReplyAdapter implements OFDescStatsReply {
 
     @Override
     public OFStatsType getStatsType() {
-        return OFStatsType.DESC;
+        return null;
     }
 
     @Override

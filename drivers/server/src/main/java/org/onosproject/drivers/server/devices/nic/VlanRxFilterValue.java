@@ -30,10 +30,9 @@ public class VlanRxFilterValue extends RxFilterValue {
 
     /**
      * Constructs a VLAN-based Rx filter.
-     * @param cpuId CPU id of the server this tag will lead to
      */
-    public VlanRxFilterValue(int cpuId) {
-        super(cpuId);
+    public VlanRxFilterValue() {
+        super();
         this.vlanId = VlanId.NONE;
     }
 
@@ -41,10 +40,9 @@ public class VlanRxFilterValue extends RxFilterValue {
      * Constructs a VLAN-based Rx filter with specific ID.
      *
      * @param vlanId a VLAN ID to use as a filter
-     * @param cpuId CPU id of the server this tag will lead to
      */
-    public VlanRxFilterValue(VlanId vlanId, int cpuId) {
-        super(cpuId);
+    public VlanRxFilterValue(VlanId vlanId) {
+        super();
         setValue(vlanId);
     }
 
@@ -54,7 +52,7 @@ public class VlanRxFilterValue extends RxFilterValue {
      * @param other a source VlanRxFilterValue object
      */
     public VlanRxFilterValue(VlanRxFilterValue other) {
-        super(other.cpuId);
+        super();
         setValue(other.value());
     }
 

@@ -15,11 +15,9 @@
  */
 package org.onosproject.provider.nil.cli;
 
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.Option;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
-
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.commands.Option;
 import org.onlab.util.Tools;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -32,7 +30,6 @@ import org.onosproject.provider.nil.TopologySimulator;
 /**
  * Adds a simulated device to the custom topology simulation.
  */
-@Service
 @Command(scope = "onos", name = "null-create-device",
         description = "Adds a simulated device to the custom topology simulation")
 public class CreateNullDevice extends CreateNullEntity {
@@ -73,7 +70,7 @@ public class CreateNullDevice extends CreateNullEntity {
     String sw = "0.1.2";
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         NullProviders service = get(NullProviders.class);
         NetworkConfigService cfgService = get(NetworkConfigService.class);
 

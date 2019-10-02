@@ -16,92 +16,82 @@
 
 package org.onosproject.grpc.ctl;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.Striped;
-import io.grpc.LoadBalancerRegistry;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolverRegistry;
-import io.grpc.internal.DnsNameResolverProvider;
-import io.grpc.internal.PickFirstLoadBalancerProvider;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyChannelBuilder;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.grpc.api.GrpcChannelController;
+import org.onosproject.grpc.api.GrpcChannelId;
+import org.onosproject.grpc.proto.dummy.Dummy;
+import org.onosproject.grpc.proto.dummy.DummyServiceGrpc;
+import org.onosproject.net.DeviceId;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLException;
-import java.net.URI;
+import java.io.IOException;
+import java.util.Collection;
 import java.util.Dictionary;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Strings.isNullOrEmpty;
-import static java.lang.String.format;
-import static org.onosproject.grpc.ctl.OsgiPropertyConstants.ENABLE_MESSAGE_LOG;
-import static org.onosproject.grpc.ctl.OsgiPropertyConstants.ENABLE_MESSAGE_LOG_DEFAULT;
 
 /**
  * Default implementation of the GrpcChannelController.
  */
-@Component(immediate = true, service = GrpcChannelController.class,
-        property = {
-                ENABLE_MESSAGE_LOG + ":Boolean=" + ENABLE_MESSAGE_LOG_DEFAULT,
-        })
+@Component(immediate = true)
+@Service
 public class GrpcChannelControllerImpl implements GrpcChannelController {
 
-    private static final String GRPC = "grpc";
-    private static final String GRPCS = "grpcs";
+    // FIXME: Should use message size to determine whether it needs to log the message or not.
+    private  static final String SET_FORWARDING_PIPELINE_CONFIG_METHOD = "p4.P4Runtime/SetForwardingPipelineConfig";
 
-    private static final int DEFAULT_MAX_INBOUND_MSG_SIZE = 256; // Megabytes.
-    private static final int MEGABYTES = 1024 * 1024;
-
-    private static final PickFirstLoadBalancerProvider PICK_FIRST_LOAD_BALANCER_PROVIDER =
-            new PickFirstLoadBalancerProvider();
-    private static final DnsNameResolverProvider DNS_NAME_RESOLVER_PROVIDER =
-            new DnsNameResolverProvider();
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService componentConfigService;
 
-    /**
-     * Indicates whether to log gRPC messages.
-     */
-    private final AtomicBoolean enableMessageLog = new AtomicBoolean(
-            ENABLE_MESSAGE_LOG_DEFAULT);
+    // Hint: set to true to log all gRPC messages received/sent on all channels
+    // Does not enable log on existing channels
+    private static final boolean DEFAULT_LOG_LEVEL = false;
+    @Property(name = "enableMessageLog", boolValue =  DEFAULT_LOG_LEVEL,
+            label = "Indicates whether to log all gRPC messages sent and received on all channels")
+    public static boolean enableMessageLog = DEFAULT_LOG_LEVEL;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private Map<URI, ManagedChannel> channels;
-    private Map<URI, GrpcLoggingInterceptor> interceptors;
-
+    private Map<GrpcChannelId, ManagedChannel> channels;
     private final Striped<Lock> channelLocks = Striped.lock(30);
 
     @Activate
     public void activate() {
         componentConfigService.registerProperties(getClass());
         channels = new ConcurrentHashMap<>();
-        interceptors = new ConcurrentHashMap<>();
-        LoadBalancerRegistry.getDefaultRegistry()
-                .register(PICK_FIRST_LOAD_BALANCER_PROVIDER);
-        NameResolverRegistry.getDefaultRegistry()
-                .register(DNS_NAME_RESOLVER_PROVIDER);
         log.info("Started");
     }
 
@@ -109,136 +99,196 @@ public class GrpcChannelControllerImpl implements GrpcChannelController {
     public void modified(ComponentContext context) {
         if (context != null) {
             Dictionary<?, ?> properties = context.getProperties();
-            enableMessageLog.set(Tools.isPropertyEnabled(
-                    properties, ENABLE_MESSAGE_LOG, ENABLE_MESSAGE_LOG_DEFAULT));
-            log.info("Configured. Logging of gRPC messages is {}",
-                     enableMessageLog.get() ? "ENABLED" : "DISABLED");
+            enableMessageLog = Tools.isPropertyEnabled(properties, "enableMessageLog",
+                    DEFAULT_LOG_LEVEL);
+            log.info("Configured. Log of gRPC messages is {}", enableMessageLog ? "enabled" : "disabled");
         }
     }
 
     @Deactivate
     public void deactivate() {
-        LoadBalancerRegistry.getDefaultRegistry()
-                .deregister(PICK_FIRST_LOAD_BALANCER_PROVIDER);
-        NameResolverRegistry.getDefaultRegistry()
-                .register(DNS_NAME_RESOLVER_PROVIDER);
         componentConfigService.unregisterProperties(getClass(), false);
-        channels.values().forEach(ManagedChannel::shutdownNow);
+        channels.values().forEach(ManagedChannel::shutdown);
         channels.clear();
-        channels = null;
-        interceptors.values().forEach(GrpcLoggingInterceptor::close);
-        interceptors.clear();
-        interceptors = null;
         log.info("Stopped");
     }
 
     @Override
-    public ManagedChannel create(URI channelUri) {
-        return create(channelUri, makeChannelBuilder(channelUri));
-    }
-
-    @Override
-    public ManagedChannel create(URI channelUri, ManagedChannelBuilder<?> channelBuilder) {
-        checkNotNull(channelUri);
+    public ManagedChannel connectChannel(GrpcChannelId channelId,
+                                         ManagedChannelBuilder<?> channelBuilder)
+            throws IOException {
+        checkNotNull(channelId);
         checkNotNull(channelBuilder);
 
-        channelLocks.get(channelUri).lock();
+        Lock lock = channelLocks.get(channelId);
+        lock.lock();
+
         try {
-            if (channels.containsKey(channelUri)) {
-                throw new IllegalArgumentException(format(
-                        "A channel with ID '%s' already exists", channelUri));
-            }
-
-            log.info("Creating new gRPC channel {}...", channelUri);
-
-            final GrpcLoggingInterceptor interceptor = new GrpcLoggingInterceptor(
-                    channelUri, enableMessageLog);
-            channelBuilder.intercept(interceptor);
-
-            final ManagedChannel channel = channelBuilder.build();
-
-            channels.put(channelUri, channelBuilder.build());
-            interceptors.put(channelUri, interceptor);
-
+            channelBuilder.intercept(new InternalLogChannelInterceptor(channelId));
+            ManagedChannel channel = channelBuilder.build();
+            // Forced connection not yet implemented. Use workaround...
+            // channel.getState(true);
+            doDummyMessage(channel);
+            channels.put(channelId, channel);
             return channel;
         } finally {
-            channelLocks.get(channelUri).unlock();
+            lock.unlock();
         }
     }
 
-    private NettyChannelBuilder makeChannelBuilder(URI channelUri) {
-
-        checkArgument(channelUri.getScheme().equals(GRPC)
-                              || channelUri.getScheme().equals(GRPCS),
-                      format("Server URI scheme must be %s or %s", GRPC, GRPCS));
-        checkArgument(!isNullOrEmpty(channelUri.getHost()),
-                      "Server host address should not be empty");
-        checkArgument(channelUri.getPort() > 0 && channelUri.getPort() <= 65535,
-                      "Invalid server port");
-
-        final boolean useTls = channelUri.getScheme().equals(GRPCS);
-
-        final NettyChannelBuilder channelBuilder = NettyChannelBuilder
-                .forAddress(channelUri.getHost(), channelUri.getPort())
-                .nameResolverFactory(DNS_NAME_RESOLVER_PROVIDER)
-                .defaultLoadBalancingPolicy(
-                        PICK_FIRST_LOAD_BALANCER_PROVIDER.getPolicyName())
-                .maxInboundMessageSize(
-                        DEFAULT_MAX_INBOUND_MSG_SIZE * MEGABYTES);
-
-        if (useTls) {
-            try {
-                // Accept any server certificate; this is insecure and
-                // should not be used in production.
-                final SslContext sslContext = GrpcSslContexts.forClient().trustManager(
-                        InsecureTrustManagerFactory.INSTANCE).build();
-                channelBuilder.sslContext(sslContext).useTransportSecurity();
-            } catch (SSLException e) {
-                log.error("Failed to build SSL context", e);
-                return null;
+    private void doDummyMessage(ManagedChannel channel) throws IOException {
+        DummyServiceGrpc.DummyServiceBlockingStub dummyStub = DummyServiceGrpc
+                .newBlockingStub(channel)
+                .withDeadlineAfter(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        try {
+            dummyStub.sayHello(Dummy.DummyMessageThatNoOneWouldReallyUse
+                                       .getDefaultInstance());
+        } catch (StatusRuntimeException e) {
+            if (e.getStatus() != Status.UNIMPLEMENTED) {
+                // UNIMPLEMENTED means that the server received our message but
+                // doesn't know how to handle it. Hence, channel is open.
+                throw new IOException(e);
             }
-        } else {
-            channelBuilder.usePlaintext();
         }
-
-        return channelBuilder;
     }
 
     @Override
-    public void destroy(URI channelUri) {
-        checkNotNull(channelUri);
+    public boolean isChannelOpen(GrpcChannelId channelId) {
+        checkNotNull(channelId);
 
-        channelLocks.get(channelUri).lock();
+        Lock lock = channelLocks.get(channelId);
+        lock.lock();
+
         try {
-            final ManagedChannel channel = channels.remove(channelUri);
-            if (channel != null) {
-                shutdownNowAndWait(channel, channelUri);
+            if (!channels.containsKey(channelId)) {
+                log.warn("Can't check if channel open for unknown channel ID {}",
+                         channelId);
+                return false;
             }
-            final GrpcLoggingInterceptor interceptor = interceptors.remove(channelUri);
-            if (interceptor != null) {
-                interceptor.close();
+            try {
+                doDummyMessage(channels.get(channelId));
+                return true;
+            } catch (IOException e) {
+                log.debug("Unable to send dummy message to {}: {}",
+                          channelId, e.getCause().getMessage());
+                return false;
             }
         } finally {
-            channelLocks.get(channelUri).unlock();
-        }
-    }
-
-    private void shutdownNowAndWait(ManagedChannel channel, URI channelUri) {
-        try {
-            if (!channel.shutdownNow()
-                    .awaitTermination(5, TimeUnit.SECONDS)) {
-                log.error("Channel {} did not terminate properly",
-                          channelUri);
-            }
-        } catch (InterruptedException e) {
-            log.warn("Channel {} didn't shutdown in time", channelUri);
-            Thread.currentThread().interrupt();
+            lock.unlock();
         }
     }
 
     @Override
-    public Optional<ManagedChannel> get(URI channelUri) {
-        checkNotNull(channelUri);
-        return Optional.ofNullable(channels.get(channelUri));
+    public void disconnectChannel(GrpcChannelId channelId) {
+        checkNotNull(channelId);
+
+        Lock lock = channelLocks.get(channelId);
+        lock.lock();
+
+        try {
+            if (!channels.containsKey(channelId)) {
+                // Nothing to do.
+                return;
+            }
+            ManagedChannel channel = channels.get(channelId);
+
+            try {
+                channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                log.warn("Channel {} didn't shut down in time.");
+                channel.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+
+            channels.remove(channelId);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public Map<GrpcChannelId, ManagedChannel> getChannels() {
+        return ImmutableMap.copyOf(channels);
+    }
+
+    @Override
+    public Collection<ManagedChannel> getChannels(final DeviceId deviceId) {
+        checkNotNull(deviceId);
+        final Set<ManagedChannel> deviceChannels = new HashSet<>();
+        channels.forEach((k, v) -> {
+            if (k.deviceId().equals(deviceId)) {
+                deviceChannels.add(v);
+            }
+        });
+
+        return ImmutableSet.copyOf(deviceChannels);
+    }
+
+    @Override
+    public Optional<ManagedChannel> getChannel(GrpcChannelId channelId) {
+        checkNotNull(channelId);
+
+        Lock lock = channelLocks.get(channelId);
+        lock.lock();
+
+        try {
+            return Optional.ofNullable(channels.get(channelId));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * gRPC client interceptor that logs all messages sent and received.
+     */
+    private final class InternalLogChannelInterceptor implements ClientInterceptor {
+
+        private final GrpcChannelId channelId;
+
+        private InternalLogChannelInterceptor(GrpcChannelId channelId) {
+            this.channelId = channelId;
+        }
+
+        @Override
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                MethodDescriptor<ReqT, RespT> methodDescriptor,
+                CallOptions callOptions, Channel channel) {
+            return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+                    channel.newCall(methodDescriptor, callOptions.withoutWaitForReady())) {
+
+                @Override
+                public void sendMessage(ReqT message) {
+                    if (enableMessageLog && !methodDescriptor.getFullMethodName()
+                            .startsWith(SET_FORWARDING_PIPELINE_CONFIG_METHOD)) {
+                        log.info("*** SENDING GRPC MESSAGE [{}]\n{}:\n{}",
+                                channelId, methodDescriptor.getFullMethodName(),
+                                message.toString());
+                    }
+                    super.sendMessage(message);
+                }
+
+                @Override
+                public void start(Listener<RespT> responseListener, Metadata headers) {
+
+                    ClientCall.Listener<RespT> listener = new ForwardingClientCallListener<RespT>() {
+                        @Override
+                        protected Listener<RespT> delegate() {
+                            return responseListener;
+                        }
+
+                        @Override
+                        public void onMessage(RespT message) {
+                            if (enableMessageLog) {
+                                log.info("*** RECEIVED GRPC MESSAGE [{}]\n{}:\n{}",
+                                        channelId, methodDescriptor.getFullMethodName(),
+                                        message.toString());
+                            }
+                            super.onMessage(message);
+                        }
+                    };
+                    super.start(listener, headers);
+                }
+            };
+        }
     }
 }

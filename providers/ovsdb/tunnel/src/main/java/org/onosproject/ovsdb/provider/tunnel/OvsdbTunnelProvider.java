@@ -15,6 +15,14 @@
  */
 package org.onosproject.ovsdb.provider.tunnel;
 
+import static org.slf4j.LoggerFactory.getLogger;
+
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.incubator.net.tunnel.Tunnel;
 import org.onosproject.incubator.net.tunnel.TunnelDescription;
 import org.onosproject.incubator.net.tunnel.TunnelId;
@@ -25,24 +33,18 @@ import org.onosproject.net.ElementId;
 import org.onosproject.net.Path;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
-
-import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider which uses when tunnel added/removed.
  */
-@Component(immediate = true, service = TunnelProvider.class)
+@Component(immediate = true)
+@Service
 public class OvsdbTunnelProvider extends AbstractProvider
         implements TunnelProvider {
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected TunnelProviderRegistry providerRegistry;
 
     private TunnelProviderService providerService;

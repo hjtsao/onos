@@ -22,7 +22,6 @@ load("//tools/build/bazel:pom_file.bzl", "pom_file")
 load("//tools/build/bazel:java_sources.bzl", "java_sources")
 load("//tools/build/bazel:java_sources.bzl", "java_sources_alt")
 load("//tools/build/bazel:javadoc.bzl", "javadoc")
-load("//tools/build/bazel:minimal_jar.bzl", "minimal_jar")
 load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
 
 def _auto_name():
@@ -84,7 +83,6 @@ def _bnd_impl(ctx):
         web_context = "NONE"
     web_xml = ctx.attr.web_xml
     dynamicimportPackages = ""
-    karaf_commands = ctx.attr.karaf_commands
     cp = ""
 
     inputDependencies = [input_file]
@@ -121,7 +119,6 @@ def _bnd_impl(ctx):
         dynamicimportPackages,
         "classes",
         bundle_classpath,
-        karaf_commands,
     ]
 
     ctx.actions.run(
@@ -154,7 +151,6 @@ _bnd = rule(
         "web_context": attr.string(),
         "web_xml": attr.label_list(allow_files = True),
         "include_resources": attr.string(),
-        "karaf_commands": attr.string(),
         "_bnd_exe": attr.label(
             executable = True,
             cfg = "host",
@@ -167,46 +163,6 @@ _bnd = rule(
         "osgi_jar": "lib%{name}.jar",
     },
     implementation = _bnd_impl,
-)
-
-"""
-    Implementation of the rule to generate cfgdef files from java class source
-"""
-
-def _cfgdef_impl(ctx):
-    output_jar = ctx.outputs.cfgdef_jar.path
-
-    arguments = [
-        output_jar,
-    ]
-
-    for src in ctx.files.srcs:
-        arguments.append(src.path)
-
-    ctx.actions.run(
-        inputs = ctx.files.srcs,
-        outputs = [ctx.outputs.cfgdef_jar],
-        arguments = arguments,
-        progress_message = "Running cfgdef generator on: %s" % ctx.attr.name,
-        executable = ctx.executable._cfgdef_generator_exe,
-    )
-
-"""
-    Rule definition to call cfgdef generator to create the *.cfgdef files from java sources
-"""
-_cfgdef = rule(
-    attrs = {
-        "srcs": attr.label_list(allow_files = True),
-        "_cfgdef_generator_exe": attr.label(
-            executable = True,
-            cfg = "host",
-            allow_files = True,
-            default = Label("//tools/build/cfgdef:cfgdef_generator"),
-        ),
-        "cfgdef_jar": attr.output(),
-    },
-    fragments = ["java"],
-    implementation = _cfgdef_impl,
 )
 
 """
@@ -226,14 +182,20 @@ def _swagger_java_impl(ctx):
     package_name = ctx.attr.package_name
 
     srcs_arg = ""
+    resources_arg = ""
+    input_dependencies = []
 
     for file in ctx.files.srcs:
         srcs_arg += file.path + ","
+        input_dependencies.append(file)
+
+    for resource in resources_arg:
+        resources_arg += resource.path + ","
 
     # call swagger generator to make the swagger JSON and java files
     arguments = [
         srcs_arg,
-        "",
+        resources_arg,
         "",
         package_name + "/src/main/resources",
         output_dir,
@@ -270,14 +232,20 @@ def _swagger_json_impl(ctx):
     package_name = ctx.attr.package_name
 
     srcs_arg = ""
+    resources_arg = ""
+    input_dependencies = []
 
     for file in ctx.files.srcs:
         srcs_arg += file.path + ","
+        input_dependencies.append(file)
+
+    for resource in resources_arg:
+        resources_arg += resource.path + ","
 
     # call swagger generator to make the swagger JSON and java files
     arguments = [
         srcs_arg,
-        "",
+        resources_arg,
         "",
         package_name + "/src/main/resources",
         output_dir,
@@ -365,8 +333,7 @@ def wrapped_osgi_jar(
         version = ONOS_VERSION,
         group = "org.onosproject",
         import_packages = "*",
-        visibility = ["//visibility:private"],
-        generate_pom = False):
+        visibility = ["//visibility:private"]):
     _bnd(
         name = name,
         source = jar,
@@ -377,16 +344,6 @@ def wrapped_osgi_jar(
         import_packages = import_packages,
         web_xml = None,
     )
-
-    if generate_pom:
-        pom_file(
-            name = name + "-pom",
-            artifact = name,
-            deps = deps,
-            visibility = visibility,
-        )
-    minimal_jar(name = name + "-sources", visibility = visibility)
-    minimal_jar(name = name + "-javadoc", visibility = visibility)
 
 """
     Creates an OSGI jar and test jar file from a set of source and test files.
@@ -427,8 +384,7 @@ def osgi_jar_with_tests(
         api_description = "",
         api_package = "",
         import_packages = None,
-        bundle_classpath = "",
-        karaf_command_packages = []):
+        bundle_classpath = ""):
     if name == None:
         name = _auto_name()
     if srcs == None:
@@ -448,14 +404,13 @@ def osgi_jar_with_tests(
     if import_packages == None:
         import_packages = "*"
     tests_name = name + "-tests"
-    tests_jar_deps = depset(deps + test_deps).to_list() + [name]
+    tests_jar_deps = list(depset(deps + test_deps)) + [name]
     all_test_deps = tests_jar_deps + [tests_name]
     web_xml = _webapp()
 
     native_srcs = srcs
     native_resources = resources
-
-    if web_context != None and api_title != "":
+    if web_context != None and api_title != "" and len(resources) != 0:
         # generate Swagger files if needed
         _swagger_java(
             name = name + "_swagger_java",
@@ -490,19 +445,12 @@ def osgi_jar_with_tests(
 
     javacopts = ["-XepDisableAllChecks"] if suppress_errorprone else []
 
-    _cfgdef(
-        name = name + "_cfgdef_jar",
-        srcs = native_srcs,
-        visibility = visibility,
-        cfgdef_jar = name + "_cfgdef.jar",
-    )
-
     # compile the Java code
     if len(resource_jars) > 0:
         native.java_library(
             name = name + "-native",
             srcs = native_srcs,
-            resource_jars = resource_jars + [name + "_cfgdef_jar"],
+            resource_jars = resource_jars,
             deps = deps,
             visibility = visibility,
             javacopts = javacopts,
@@ -511,14 +459,12 @@ def osgi_jar_with_tests(
         native.java_library(
             name = name + "-native",
             srcs = native_srcs,
-            resource_jars = [name + "_cfgdef_jar"],
             resources = native_resources,
             deps = deps,
             visibility = visibility,
             javacopts = javacopts,
         )
 
-    karaf_command_packages_string = ",".join(karaf_command_packages)
     _bnd(
         name = name,
         source = name + "-native",
@@ -531,7 +477,6 @@ def osgi_jar_with_tests(
         web_context = web_context,
         web_xml = web_xml,
         include_resources = _include_resources_to_string(include_resources),
-        karaf_commands = karaf_command_packages_string,
     )
 
     # rule for generating pom file for publishing
@@ -544,9 +489,6 @@ def osgi_jar_with_tests(
     # rule for building javadocs
     if not suppress_javadocs:
         javadoc(name = name + "-javadoc", deps = deps, srcs = srcs, visibility = visibility)
-    else:
-        minimal_jar(name = name + "-javadoc", visibility = visibility)
-        minimal_jar(name = name + "-sources", visibility = visibility)
 
     if test_srcs != []:
         native.java_library(
@@ -622,8 +564,7 @@ def osgi_jar(
         api_version = "",
         api_description = "",
         api_package = "",
-        bundle_classpath = "",
-        karaf_command_packages = []):
+        bundle_classpath = ""):
     if srcs == None:
         srcs = _all_java_sources()
     if deps == None:
@@ -653,7 +594,6 @@ def osgi_jar(
         api_package = api_package,
         web_context = web_context,
         bundle_classpath = bundle_classpath,
-        karaf_command_packages = karaf_command_packages,
     )
 
 """
@@ -697,45 +637,37 @@ def osgi_proto_jar(
         deps = [],
         group = "org.onosproject",
         visibility = ["//visibility:public"],
-        version = ONOS_VERSION,
-        karaf_command_packages = []):
+        version = ONOS_VERSION):
     if name == None:
         name = _auto_name()
-    proto_name = name + "-java-proto"
     native.java_proto_library(
-        name = proto_name,
+        name = name + "-java-proto",
         deps = proto_libs,
     )
     java_sources_alt(
-        name = proto_name + "-srcjar",
-        srcs = [":" + proto_name],
+        name = name + "-proto-srcjar",
+        srcs = [":%s-java-proto" % name],
     )
     osgi_srcs = [
-        proto_name + "-srcjar",
+        ":%s-proto-srcjar" % name,
     ]
     base_deps = [
-        "//deps:com_google_protobuf_protobuf_java",
+        "@com_google_protobuf//:protobuf_java",
     ]
     if grpc_proto_lib != None:
-        grpc_name = name + "-java-grpc"
         java_grpc_library(
-            name = grpc_name,
+            name = name + "-java-grpc",
             srcs = [grpc_proto_lib],
-            deps = [":" + proto_name],
-        )
-        java_sources_alt(
-            name = grpc_name + "-srcjar",
-            srcs = [":lib%s-src.jar" % grpc_name],
+            deps = [":%s-java-proto" % name],
         )
         osgi_srcs.append(
-            ":" + grpc_name + "-srcjar",
+            ":%s-java-grpc__do_not_reference__srcjar" % name,
         )
         base_deps.extend([
             "@com_google_guava_guava//jar",
-            "//deps:io_grpc_grpc_api_context",
-            "//deps:io_grpc_grpc_stub",
-            "//deps:io_grpc_grpc_protobuf",
-            "@javax_annotation_javax_annotation_api//jar",
+            "@io_grpc_grpc_java//core",
+            "@io_grpc_grpc_java//stub",
+            "@io_grpc_grpc_java//protobuf",
         ])
     osgi_jar(
         name = name,
@@ -747,5 +679,4 @@ def osgi_proto_jar(
         suppress_errorprone = True,
         suppress_checkstyle = True,
         suppress_javadocs = True,
-        karaf_command_packages = karaf_command_packages,
     )

@@ -15,9 +15,10 @@
  */
 package org.onosproject.pipelines.basic;
 
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Sets;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.util.ImmutableByteSequence;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -60,6 +61,7 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
     private static final int MAXHOP = 64;
     private static final int PORTMASK = 0xffff;
     private static final int IDLE_TIMEOUT = 100;
+    private static final int PKT_INSTANCE_TYPE_INGRESS_CLONE = 1;
     // Application name of the pipeline which adds this implementation to the pipeconf
     private static final String PIPELINE_APP_NAME = "org.onosproject.pipelines.basic";
     private final Logger log = getLogger(getClass());
@@ -72,51 +74,81 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
             Criterion.Type.IP_PROTO);
 
     private static final Set<PiTableId> TABLES_TO_CLEANUP = Sets.newHashSet(
-            IntConstants.INGRESS_PROCESS_INT_SOURCE_TB_INT_SOURCE,
-            IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_TB_SET_SOURCE,
-            IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_TB_SET_SINK,
-            IntConstants.EGRESS_PROCESS_INT_TRANSIT_TB_INT_INSERT,
-            IntConstants.EGRESS_PROCESS_INT_REPORT_TB_GENERATE_REPORT);
+            IntConstants.TBL_INT_INSERT_ID,
+            IntConstants.TBL_INT_INST_0003_ID,
+            IntConstants.TBL_INT_INST_0407_ID,
+            IntConstants.TBL_SET_SOURCE_ID,
+            IntConstants.TBL_SET_SINK_ID,
+            IntConstants.TBL_INT_SOURCE_ID,
+            IntConstants.TBL_GENERATE_REPORT_ID);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private FlowRuleService flowRuleService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private CoreService coreService;
 
     private DeviceId deviceId;
     private static final int DEFAULT_PRIORITY = 10000;
+    private static final ImmutableBiMap<Integer, PiActionId> INST_0003_ACTION_MAP =
+            ImmutableBiMap.<Integer, PiActionId>builder()
+                    .put(0, IntConstants.ACT_INT_SET_HEADER_0003_I0_ID)
+                    .put(1, IntConstants.ACT_INT_SET_HEADER_0003_I1_ID)
+                    .put(2, IntConstants.ACT_INT_SET_HEADER_0003_I2_ID)
+                    .put(3, IntConstants.ACT_INT_SET_HEADER_0003_I3_ID)
+                    .put(4, IntConstants.ACT_INT_SET_HEADER_0003_I4_ID)
+                    .put(5, IntConstants.ACT_INT_SET_HEADER_0003_I5_ID)
+                    .put(6, IntConstants.ACT_INT_SET_HEADER_0003_I6_ID)
+                    .put(7, IntConstants.ACT_INT_SET_HEADER_0003_I7_ID)
+                    .put(8, IntConstants.ACT_INT_SET_HEADER_0003_I8_ID)
+                    .put(9, IntConstants.ACT_INT_SET_HEADER_0003_I9_ID)
+                    .put(10, IntConstants.ACT_INT_SET_HEADER_0003_I10_ID)
+                    .put(11, IntConstants.ACT_INT_SET_HEADER_0003_I11_ID)
+                    .put(12, IntConstants.ACT_INT_SET_HEADER_0003_I12_ID)
+                    .put(13, IntConstants.ACT_INT_SET_HEADER_0003_I13_ID)
+                    .put(14, IntConstants.ACT_INT_SET_HEADER_0003_I14_ID)
+                    .put(15, IntConstants.ACT_INT_SET_HEADER_0003_I15_ID)
+                    .build();
 
-    private boolean setupBehaviour() {
+    private static final ImmutableBiMap<Integer, PiActionId> INST_0407_ACTION_MAP =
+            ImmutableBiMap.<Integer, PiActionId>builder()
+                    .put(0, IntConstants.ACT_INT_SET_HEADER_0407_I0_ID)
+                    .put(1, IntConstants.ACT_INT_SET_HEADER_0407_I1_ID)
+                    .put(2, IntConstants.ACT_INT_SET_HEADER_0407_I2_ID)
+                    .put(3, IntConstants.ACT_INT_SET_HEADER_0407_I3_ID)
+                    .put(4, IntConstants.ACT_INT_SET_HEADER_0407_I4_ID)
+                    .put(5, IntConstants.ACT_INT_SET_HEADER_0407_I5_ID)
+                    .put(6, IntConstants.ACT_INT_SET_HEADER_0407_I6_ID)
+                    .put(7, IntConstants.ACT_INT_SET_HEADER_0407_I7_ID)
+                    .put(8, IntConstants.ACT_INT_SET_HEADER_0407_I8_ID)
+                    .put(9, IntConstants.ACT_INT_SET_HEADER_0407_I9_ID)
+                    .put(10, IntConstants.ACT_INT_SET_HEADER_0407_I10_ID)
+                    .put(11, IntConstants.ACT_INT_SET_HEADER_0407_I11_ID)
+                    .put(12, IntConstants.ACT_INT_SET_HEADER_0407_I12_ID)
+                    .put(13, IntConstants.ACT_INT_SET_HEADER_0407_I13_ID)
+                    .put(14, IntConstants.ACT_INT_SET_HEADER_0407_I14_ID)
+                    .put(15, IntConstants.ACT_INT_SET_HEADER_0407_I15_ID)
+                    .build();
+
+    @Override
+    public boolean init() {
         deviceId = this.data().deviceId();
         flowRuleService = handler().get(FlowRuleService.class);
         coreService = handler().get(CoreService.class);
         appId = coreService.getAppId(PIPELINE_APP_NAME);
         if (appId == null) {
-            log.warn("Application ID is null. Cannot initialize behaviour.");
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public boolean init() {
-        if (!setupBehaviour()) {
+            log.warn("Application ID is null. Cannot initialize INT-pipeline.");
             return false;
         }
 
+        // process_int_transit.tb_int_insert
         PiActionParam transitIdParam = new PiActionParam(
-                IntConstants.SWITCH_ID,
+                IntConstants.ACT_PRM_SWITCH_ID,
                 ImmutableByteSequence.copyFrom(
                         Integer.parseInt(deviceId.toString().substring(
                                 deviceId.toString().length() - 2))));
-        TrafficSelector selector = DefaultTrafficSelector.builder()
-                .matchPi(PiCriterion.builder().matchExact(
-                        IntConstants.HDR_INT_IS_VALID, (byte) 0x01)
-                         .build())
-                .build();
         PiAction transitAction = PiAction.builder()
-                .withId(IntConstants.EGRESS_PROCESS_INT_TRANSIT_INIT_METADATA)
+                .withId(IntConstants.ACT_INT_TRANSIT_ID)
                 .withParameter(transitIdParam)
                 .build();
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
@@ -124,35 +156,45 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 .build();
 
         FlowRule transitFlowRule = DefaultFlowRule.builder()
-                .withSelector(selector)
                 .withTreatment(treatment)
                 .fromApp(appId)
                 .withPriority(DEFAULT_PRIORITY)
                 .makePermanent()
                 .forDevice(deviceId)
-                .forTable(IntConstants.EGRESS_PROCESS_INT_TRANSIT_TB_INT_INSERT)
+                .forTable(IntConstants.TBL_INT_INSERT_ID)
                 .build();
 
         flowRuleService.applyFlowRules(transitFlowRule);
+
+        // Populate tb_int_inst_0003 table
+        INST_0003_ACTION_MAP.forEach((matchValue, actionId) ->
+                                             populateInstTableEntry(IntConstants.TBL_INT_INST_0003_ID,
+                                                                    IntConstants.INT_HDR_INST_MASK_0003_ID,
+                                                                    matchValue,
+                                                                    actionId,
+                                                                    appId));
+        // Populate tb_int_inst_0407 table
+        INST_0407_ACTION_MAP.forEach((matchValue, actionId) ->
+                                             populateInstTableEntry(IntConstants.TBL_INT_INST_0407_ID,
+                                                                    IntConstants.INT_HDR_INST_MASK_0407_ID,
+                                                                    matchValue,
+                                                                    actionId,
+                                                                    appId));
 
         return true;
     }
 
     @Override
     public boolean setSourcePort(PortNumber port) {
-        if (!setupBehaviour()) {
-            return false;
-        }
-
-        // process_int_source_sink.tb_set_source for each host-facing port
+        // process_set_source_sink.tb_set_source for each host-facing port
         PiCriterion ingressCriterion = PiCriterion.builder()
-                .matchExact(IntConstants.HDR_STANDARD_METADATA_INGRESS_PORT, port.toLong())
+                .matchExact(BasicConstants.HDR_IN_PORT_ID, port.toLong())
                 .build();
         TrafficSelector srcSelector = DefaultTrafficSelector.builder()
                 .matchPi(ingressCriterion)
                 .build();
         PiAction setSourceAct = PiAction.builder()
-                .withId(IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_INT_SET_SOURCE)
+                .withId(IntConstants.ACT_INT_SET_SOURCE_ID)
                 .build();
         TrafficTreatment srcTreatment = DefaultTrafficTreatment.builder()
                 .piTableAction(setSourceAct)
@@ -164,7 +206,7 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 .withPriority(DEFAULT_PRIORITY)
                 .makePermanent()
                 .forDevice(deviceId)
-                .forTable(IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_TB_SET_SOURCE)
+                .forTable(IntConstants.TBL_SET_SOURCE_ID)
                 .build();
         flowRuleService.applyFlowRules(srcFlowRule);
         return true;
@@ -172,19 +214,15 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
 
     @Override
     public boolean setSinkPort(PortNumber port) {
-        if (!setupBehaviour()) {
-            return false;
-        }
-
         // process_set_source_sink.tb_set_sink
         PiCriterion egressCriterion = PiCriterion.builder()
-                .matchExact(IntConstants.HDR_STANDARD_METADATA_EGRESS_SPEC, port.toLong())
+                .matchExact(IntConstants.HDR_OUT_PORT_ID, port.toLong())
                 .build();
         TrafficSelector sinkSelector = DefaultTrafficSelector.builder()
                 .matchPi(egressCriterion)
                 .build();
         PiAction setSinkAct = PiAction.builder()
-                .withId(IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_INT_SET_SINK)
+                .withId(IntConstants.ACT_INT_SET_SINK_ID)
                 .build();
         TrafficTreatment sinkTreatment = DefaultTrafficTreatment.builder()
                 .piTableAction(setSinkAct)
@@ -196,7 +234,7 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 .withPriority(DEFAULT_PRIORITY)
                 .makePermanent()
                 .forDevice(deviceId)
-                .forTable(IntConstants.INGRESS_PROCESS_INT_SOURCE_SINK_TB_SET_SINK)
+                .forTable(IntConstants.TBL_SET_SINK_ID)
                 .build();
         flowRuleService.applyFlowRules(sinkFlowRule);
         return true;
@@ -221,10 +259,6 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
 
     @Override
     public void cleanup() {
-        if (!setupBehaviour()) {
-            return;
-        }
-
         StreamSupport.stream(flowRuleService.getFlowEntries(
                 data().deviceId()).spliterator(), false)
                 .filter(f -> f.table().type() == TableId.Type.PIPELINE_INDEPENDENT)
@@ -274,24 +308,30 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
     }
 
     private FlowRule buildWatchlistEntry(IntObjective obj) {
+        coreService = handler().get(CoreService.class);
+        appId = coreService.getAppId(PIPELINE_APP_NAME);
+        if (appId == null) {
+            log.warn("Application ID is null. Cannot initialize INT-pipeline.");
+            return null;
+        }
         int instructionBitmap = buildInstructionBitmap(obj.metadataTypes());
-        PiActionParam hopMetaLenParam = new PiActionParam(
-                IntConstants.HOP_METADATA_LEN,
-                ImmutableByteSequence.copyFrom(Integer.bitCount(instructionBitmap)));
-        PiActionParam hopCntParam = new PiActionParam(
-                IntConstants.REMAINING_HOP_CNT,
+        PiActionParam maxHopParam = new PiActionParam(
+                IntConstants.ACT_PRM_MAX_HOP_ID,
                 ImmutableByteSequence.copyFrom(MAXHOP));
+        PiActionParam instCntParam = new PiActionParam(
+                IntConstants.ACT_PRM_INS_CNT_ID,
+                ImmutableByteSequence.copyFrom(Integer.bitCount(instructionBitmap)));
         PiActionParam inst0003Param = new PiActionParam(
-                IntConstants.INS_MASK0003,
+                IntConstants.ACT_PRM_INS_MASK0003_ID,
                 ImmutableByteSequence.copyFrom((instructionBitmap >> 12) & 0xF));
         PiActionParam inst0407Param = new PiActionParam(
-                IntConstants.INS_MASK0407,
+                IntConstants.ACT_PRM_INS_MASK0407_ID,
                 ImmutableByteSequence.copyFrom((instructionBitmap >> 8) & 0xF));
 
         PiAction intSourceAction = PiAction.builder()
-                .withId(IntConstants.INGRESS_PROCESS_INT_SOURCE_INT_SOURCE_DSCP)
-                .withParameter(hopMetaLenParam)
-                .withParameter(hopCntParam)
+                .withId(IntConstants.ACT_INT_SOURCE_DSCP_ID)
+                .withParameter(maxHopParam)
+                .withParameter(instCntParam)
                 .withParameter(inst0003Param)
                 .withParameter(inst0407Param)
                 .build();
@@ -312,28 +352,28 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 case TCP_SRC:
                     sBuilder.matchPi(
                             PiCriterion.builder().matchTernary(
-                                    IntConstants.HDR_LOCAL_METADATA_L4_SRC_PORT,
+                                    IntConstants.LOCAL_META_SRC_PORT_ID,
                                     ((TcpPortCriterion) criterion).tcpPort().toInt(), PORTMASK)
                                     .build());
                     break;
                 case UDP_SRC:
                     sBuilder.matchPi(
                             PiCriterion.builder().matchTernary(
-                                    IntConstants.HDR_LOCAL_METADATA_L4_SRC_PORT,
+                                    IntConstants.LOCAL_META_SRC_PORT_ID,
                                     ((UdpPortCriterion) criterion).udpPort().toInt(), PORTMASK)
                                     .build());
                     break;
                 case TCP_DST:
                     sBuilder.matchPi(
                             PiCriterion.builder().matchTernary(
-                                    IntConstants.HDR_LOCAL_METADATA_L4_DST_PORT,
+                                    IntConstants.LOCAL_META_DST_PORT_ID,
                                     ((TcpPortCriterion) criterion).tcpPort().toInt(), PORTMASK)
                                     .build());
                     break;
                 case UDP_DST:
                     sBuilder.matchPi(
                             PiCriterion.builder().matchTernary(
-                                    IntConstants.HDR_LOCAL_METADATA_L4_DST_PORT,
+                                    IntConstants.LOCAL_META_DST_PORT_ID,
                                     ((UdpPortCriterion) criterion).udpPort().toInt(), PORTMASK)
                                     .build());
                     break;
@@ -347,7 +387,7 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 .withSelector(sBuilder.build())
                 .withTreatment(instTreatment)
                 .withPriority(DEFAULT_PRIORITY)
-                .forTable(IntConstants.INGRESS_PROCESS_INT_SOURCE_TB_INT_SOURCE)
+                .forTable(IntConstants.TBL_INT_SOURCE_ID)
                 .fromApp(appId)
                 .withIdleTimeout(IDLE_TIMEOUT)
                 .build();
@@ -404,9 +444,8 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
     }
 
     private boolean processIntObjective(IntObjective obj, boolean install) {
-        if (!setupBehaviour()) {
-            return false;
-        }
+        flowRuleService = handler().get(FlowRuleService.class);
+        deviceId = this.data().deviceId();
         if (install && !unsupportedSelectors(obj.selector()).isEmpty()) {
             log.warn("Device {} does not support criteria {} for INT.",
                      deviceId, unsupportedSelectors(obj.selector()));
@@ -431,11 +470,9 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
     }
 
     private boolean setupIntReportInternal(IntConfig cfg) {
-        if (!setupBehaviour()) {
-            return false;
-        }
+        flowRuleService = handler().get(FlowRuleService.class);
 
-        FlowRule reportRule = buildReportEntry(cfg);
+        FlowRule reportRule = buildReportEntry(cfg, PKT_INSTANCE_TYPE_INGRESS_CLONE);
         if (reportRule != null) {
             flowRuleService.applyFlowRules(reportRule);
             log.info("Report entry {} has been added to {}", reportRule, this.data().deviceId());
@@ -446,29 +483,37 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
         }
     }
 
-    private FlowRule buildReportEntry(IntConfig cfg) {
+    private FlowRule buildReportEntry(IntConfig cfg, int type) {
+        coreService = handler().get(CoreService.class);
+        appId = coreService.getAppId(PIPELINE_APP_NAME);
+        if (appId == null) {
+            log.warn("Application ID is null. Cannot build report entry.");
+            return null;
+        }
+
+        PiCriterion instTypeCriterion = PiCriterion.builder()
+                .matchExact(IntConstants.STD_META_INSTANCE_TYPE_ID, type)
+                .build();
         TrafficSelector selector = DefaultTrafficSelector.builder()
-                .matchPi(PiCriterion.builder().matchExact(
-                        IntConstants.HDR_INT_IS_VALID, (byte) 0x01)
-                                 .build())
+                .matchPi(instTypeCriterion)
                 .build();
         PiActionParam srcMacParam = new PiActionParam(
-                IntConstants.SRC_MAC,
+                IntConstants.ACT_PRM_SRC_MAC_ID,
                 ImmutableByteSequence.copyFrom(cfg.sinkMac().toBytes()));
         PiActionParam nextHopMacParam = new PiActionParam(
-                IntConstants.MON_MAC,
+                IntConstants.ACT_PRM_MON_MAC_ID,
                 ImmutableByteSequence.copyFrom(cfg.collectorNextHopMac().toBytes()));
         PiActionParam srcIpParam = new PiActionParam(
-                IntConstants.SRC_IP,
+                IntConstants.ACT_PRM_SRC_IP_ID,
                 ImmutableByteSequence.copyFrom(cfg.sinkIp().toOctets()));
         PiActionParam monIpParam = new PiActionParam(
-                IntConstants.MON_IP,
+                IntConstants.ACT_PRM_MON_IP_ID,
                 ImmutableByteSequence.copyFrom(cfg.collectorIp().toOctets()));
         PiActionParam monPortParam = new PiActionParam(
-                IntConstants.MON_PORT,
+                IntConstants.ACT_PRM_MON_PORT_ID,
                 ImmutableByteSequence.copyFrom(cfg.collectorPort().toInt()));
         PiAction reportAction = PiAction.builder()
-                .withId(IntConstants.EGRESS_PROCESS_INT_REPORT_DO_REPORT_ENCAPSULATION)
+                .withId(IntConstants.ACT_DO_REPORT_ENCAP_ID)
                 .withParameter(srcMacParam)
                 .withParameter(nextHopMacParam)
                 .withParameter(srcIpParam)
@@ -486,7 +531,7 @@ public class IntProgrammableImpl extends AbstractHandlerBehaviour implements Int
                 .withPriority(DEFAULT_PRIORITY)
                 .makePermanent()
                 .forDevice(this.data().deviceId())
-                .forTable(IntConstants.EGRESS_PROCESS_INT_REPORT_TB_GENERATE_REPORT)
+                .forTable(IntConstants.TBL_GENERATE_REPORT_ID)
                 .build();
     }
 

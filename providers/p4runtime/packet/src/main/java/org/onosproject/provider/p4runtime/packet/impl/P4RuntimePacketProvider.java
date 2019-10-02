@@ -17,7 +17,11 @@
 package org.onosproject.provider.p4runtime.packet.impl;
 
 
-import org.onlab.packet.EthType;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -40,11 +44,6 @@ import org.onosproject.p4runtime.api.P4RuntimeController;
 import org.onosproject.p4runtime.api.P4RuntimeEvent;
 import org.onosproject.p4runtime.api.P4RuntimeEventListener;
 import org.onosproject.p4runtime.api.P4RuntimePacketIn;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -60,16 +59,16 @@ public class P4RuntimePacketProvider extends AbstractProvider implements PacketP
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected P4RuntimeController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PacketProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipService mastershipService;
 
     private PacketProviderService providerService;
@@ -112,12 +111,6 @@ public class P4RuntimePacketProvider extends AbstractProvider implements PacketP
         }
     }
 
-    private EthType.EtherType getEtherType(ByteBuffer data) {
-        final short shortEthType = data.getShort(12);
-        data.rewind();
-        return EthType.EtherType.lookup(shortEthType);
-    }
-
     /**
      * Internal packet context implementation.
      */
@@ -146,6 +139,7 @@ public class P4RuntimePacketProvider extends AbstractProvider implements PacketP
             }
 
             OutboundPacket outboundPacket = new DefaultOutboundPacket(deviceId, treatment, rawData);
+            log.debug("Processing outbound packet: {}", outboundPacket);
 
             emit(outboundPacket);
         }
@@ -161,7 +155,7 @@ public class P4RuntimePacketProvider extends AbstractProvider implements PacketP
             //Masterhip message is sent to everybody but picked up only by master.
             //FIXME we need the device ID into p4RuntimeEvnetSubject to check for mastsership
             if (!(event.subject() instanceof P4RuntimePacketIn) || event.type() != P4RuntimeEvent.Type.PACKET_IN) {
-                log.debug("Unrecognized event type {}, discarding", event.type());
+                log.debug("Event type {}", event.type());
                 // Not a packet-in event, ignore it.
                 return;
             }
@@ -183,23 +177,18 @@ public class P4RuntimePacketProvider extends AbstractProvider implements PacketP
             PiPacketOperation operation = eventSubject.packetOperation();
             InboundPacket inPkt;
             try {
-                inPkt = device.as(PiPipelineInterpreter.class).mapInboundPacket(operation, deviceId);
+                inPkt = device.as(PiPipelineInterpreter.class).mapInboundPacket(operation);
             } catch (PiPipelineInterpreter.PiInterpreterException e) {
                 log.warn("Unable to interpret inbound packet from {}: {}", deviceId, e.getMessage());
                 return;
-            }
-
-            if (log.isTraceEnabled()) {
-                final EthType.EtherType etherType = getEtherType(inPkt.unparsed());
-                log.trace("Received PACKET-IN <<< device={} ingress_port={} eth_type={}",
-                          inPkt.receivedFrom().deviceId(), inPkt.receivedFrom().port(),
-                          etherType.ethType().toString());
             }
 
             if (inPkt == null) {
                 log.debug("Received null inbound packet. Ignoring.");
                 return;
             }
+
+            log.debug("Processing inbound packet: {}", inPkt.toString());
 
             OutboundPacket outPkt = new DefaultOutboundPacket(eventSubject.deviceId(), null,
                     operation.data().asReadOnlyBuffer());

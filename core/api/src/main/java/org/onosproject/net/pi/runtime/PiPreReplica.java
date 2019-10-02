@@ -16,7 +16,6 @@
 
 package org.onosproject.net.pi.runtime;
 
-import com.google.common.annotations.Beta;
 import com.google.common.base.Objects;
 import org.onosproject.net.PortNumber;
 
@@ -30,8 +29,7 @@ import static java.lang.String.format;
  * Each replica is uniquely identified inside a given multicast group or clone
  * session by the pair (egress port, instance ID).
  */
-@Beta
-public final class PiPreReplica {
+public class PiPreReplica {
 
     private final PortNumber egressPort;
     private final int instanceId;
@@ -86,6 +84,6 @@ public final class PiPreReplica {
 
     @Override
     public String toString() {
-        return format("%s:0x%s", egressPort, Integer.toHexString(instanceId));
+        return format("%s:%d", egressPort, instanceId);
     }
 }

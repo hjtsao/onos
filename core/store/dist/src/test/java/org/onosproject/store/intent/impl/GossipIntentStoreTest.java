@@ -273,11 +273,6 @@ public class GossipIntentStoreTest extends AbstractIntentTest {
         }
 
         @Override
-        public void preSetProperty(String componentName, String name, String value, boolean override) {
-
-        }
-
-        @Override
         public void unsetProperty(String componentName, String name) {
 
         }

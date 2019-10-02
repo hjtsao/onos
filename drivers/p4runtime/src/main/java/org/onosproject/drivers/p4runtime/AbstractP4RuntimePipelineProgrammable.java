@@ -16,15 +16,18 @@
 
 package org.onosproject.drivers.p4runtime;
 
+import org.onlab.util.SharedExecutors;
+import org.onosproject.net.DeviceId;
 import org.onosproject.net.behaviour.PiPipelineProgrammable;
 import org.onosproject.net.pi.model.PiPipeconf;
+import org.onosproject.p4runtime.api.P4RuntimeClient;
+import org.onosproject.p4runtime.api.P4RuntimeController;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -46,26 +49,59 @@ public abstract class AbstractP4RuntimePipelineProgrammable
 
     @Override
     public CompletableFuture<Boolean> setPipeconf(PiPipeconf pipeconf) {
-        if (!setupBehaviour("setPipeconf()")) {
-            return completedFuture(false);
+        return CompletableFuture.supplyAsync(
+                () -> doDeployConfig(pipeconf),
+                SharedExecutors.getPoolThreadExecutor());
+    }
+
+    private boolean doDeployConfig(PiPipeconf pipeconf) {
+
+        DeviceId deviceId = handler().data().deviceId();
+        P4RuntimeController controller = handler().get(P4RuntimeController.class);
+
+        P4RuntimeClient client = controller.getClient(deviceId);
+        if (client == null) {
+            log.warn("Unable to find client for {}, aborting pipeconf deploy", deviceId);
+            return false;
         }
 
-        final ByteBuffer deviceDataBuffer = createDeviceDataBuffer(pipeconf);
+        ByteBuffer deviceDataBuffer = createDeviceDataBuffer(pipeconf);
         if (deviceDataBuffer == null) {
             // Hopefully the child class logged the problem.
-            return completedFuture(false);
+            return false;
         }
 
-        return client.setPipelineConfig(p4DeviceId, pipeconf, deviceDataBuffer);
+        final Boolean deploySuccess = getFutureWithDeadline(
+                client.setPipelineConfig(pipeconf, deviceDataBuffer),
+                "deploying pipeconf", null);
+        if (deploySuccess == null) {
+            return false;
+        } else if (!deploySuccess) {
+            log.warn("Unable to deploy pipeconf {} to {}", pipeconf.id(), deviceId);
+            return false;
+        }
+
+        return true;
     }
 
     @Override
-    public CompletableFuture<Boolean> isPipeconfSet(PiPipeconf pipeconf) {
-        if (!setupBehaviour("isPipeconfSet()")) {
-            return completedFuture(false);
+    public boolean isPipeconfSet(PiPipeconf pipeconf) {
+        DeviceId deviceId = handler().data().deviceId();
+        P4RuntimeController controller = handler().get(P4RuntimeController.class);
+
+        P4RuntimeClient client = controller.getClient(deviceId);
+        if (client == null) {
+            log.warn("Unable to find client for {}, cannot check if pipeconf is set", deviceId);
+            return false;
         }
 
-        return client.isPipelineConfigSet(p4DeviceId, pipeconf);
+        ByteBuffer deviceDataBuffer = createDeviceDataBuffer(pipeconf);
+        if (deviceDataBuffer == null) {
+            // Hopefully the child class logged the problem.
+            return false;
+        }
+
+        return client.isPipelineConfigSet(pipeconf, deviceDataBuffer);
     }
 
     @Override

@@ -69,54 +69,38 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
     private static final Logger log = getLogger(OplinkOpticalPowerConfig.class);
 
     @Override
-    public Optional<Double> getTargetPower(PortNumber port, T component) {
-        Long power = acquireTargetPower(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(power.doubleValue());
+    public Optional<Long> getTargetPower(PortNumber port, T component) {
+        return Optional.ofNullable(acquireTargetPower(port, component));
     }
 
     @Override
-    public void setTargetPower(PortNumber port, T component, double power) {
+    public void setTargetPower(PortNumber port, T component, long power) {
         if (component instanceof OchSignal) {
-            setChannelTargetPower(port, (OchSignal) component, (long) power);
+            setChannelTargetPower(port, (OchSignal) component, power);
         } else {
-            setPortTargetPower(port, (long) power);
+            setPortTargetPower(port, power);
         }
     }
 
     @Override
-    public Optional<Double> currentPower(PortNumber port, T component) {
-        Long power = acquireCurrentPower(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(power.doubleValue());
+    public Optional<Long> currentPower(PortNumber port, T component) {
+        return Optional.ofNullable(acquireCurrentPower(port, component));
     }
 
     @Override
-    public Optional<Range<Double>> getTargetPowerRange(PortNumber port, T component) {
-        Range<Long> power = getTxPowerRange(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Range.closed((double) power.lowerEndpoint(), (double) power.upperEndpoint()));
+    public Optional<Range<Long>> getTargetPowerRange(PortNumber port, T component) {
+        return Optional.ofNullable(getTxPowerRange(port, component));
     }
 
     @Override
-    public Optional<Range<Double>> getInputPowerRange(PortNumber port, T component) {
-        Range<Long> power = getRxPowerRange(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Range.closed((double) power.lowerEndpoint(), (double) power.upperEndpoint()));
+    public Optional<Range<Long>> getInputPowerRange(PortNumber port, T component) {
+        return Optional.ofNullable(getRxPowerRange(port, component));
     }
 
     private String getPortPowerFilter(PortNumber port, String selection) {
         return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
                 .append(xmlOpen(KEY_PORTS))
-                .append(xml(KEY_PORTID, Double.toString(port.toLong())))
+                .append(xml(KEY_PORTID, Long.toString(port.toLong())))
                 .append(xmlOpen(KEY_PORT))
                 .append(xmlEmpty(selection))
                 .append(xmlClose(KEY_PORT))
@@ -128,7 +112,7 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
     private String getChannelPowerFilter(PortNumber port, OchSignal channel) {
         return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
                 .append(xmlOpen(KEY_OCMS))
-                .append(xml(KEY_PORTID, Double.toString(port.toLong())))
+                .append(xml(KEY_PORTID, Long.toString(port.toLong())))
                 .append(xmlOpen(KEY_OCMSTATS))
                 .append(xml(KEY_CHNUM, Integer.toString(channel.spacingMultiplier())))
                 .append(xmlEmpty(KEY_CHSTATS))
@@ -151,7 +135,7 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
     private String getPowerRangeFilter(PortNumber port, String direction) {
         return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
                 .append(xmlOpen(KEY_PORTS))
-                .append(xml(KEY_PORTID, Double.toString(port.toLong())))
+                .append(xml(KEY_PORTID, Long.toString(port.toLong())))
                 .append(xmlOpen(KEY_PORT))
                 .append(xml(KEY_PORTDIRECT, direction))
                 .append(xmlEmpty(KEY_PORTPROPERTY))
@@ -210,9 +194,9 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
         log.debug("Set port{} target power...", port);
         String cfg = new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
                 .append(xmlOpen(KEY_PORTS))
-                .append(xml(KEY_PORTID, Double.toString(port.toLong())))
+                .append(xml(KEY_PORTID, Long.toString(port.toLong())))
                 .append(xmlOpen(KEY_PORT))
-                .append(xml(KEY_PORTTARPWR, Double.toString(power)))
+                .append(xml(KEY_PORTTARPWR, Long.toString(power)))
                 .append(xmlClose(KEY_PORT))
                 .append(xmlClose(KEY_PORTS))
                 .append(xmlClose(KEY_OPENOPTICALDEV))
@@ -225,7 +209,7 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
         FlowRuleService service = handler().get(FlowRuleService.class);
         Iterable<FlowEntry> entries = service.getFlowEntries(data().deviceId());
         for (FlowEntry entry : entries) {
-            OplinkCrossConnect crossConnect = OplinkOpticalUtility.fromFlowRule(this, entry);
+            OplinkCrossConnect crossConnect  = OplinkOpticalUtility.fromFlowRule(this, entry);
             // The channel port might be input port or output port.
             if ((port.equals(crossConnect.getInPort()) || port.equals(crossConnect.getOutPort())) &&
                     channel.spacingMultiplier() == crossConnect.getChannel()) {

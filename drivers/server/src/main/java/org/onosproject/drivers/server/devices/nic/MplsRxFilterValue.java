@@ -30,11 +30,9 @@ public final class MplsRxFilterValue extends RxFilterValue {
 
     /**
      * Constructs an MPLS-based Rx filter.
-     *
-     * @param cpuId CPU ID of the server this tag will lead to
      */
-    public MplsRxFilterValue(int cpuId) {
-        super(cpuId);
+    public MplsRxFilterValue() {
+        super();
         this.mplsLabel = null;
     }
 
@@ -42,10 +40,9 @@ public final class MplsRxFilterValue extends RxFilterValue {
      * Constructs an MPLS-based Rx filter with specific label.
      *
      * @param mplsLabel an MPLS label to use as a filter
-     * @param cpuId CPU ID of the server this tag will lead to
      */
-    public MplsRxFilterValue(MplsLabel mplsLabel, int cpuId) {
-        super(cpuId);
+    public MplsRxFilterValue(MplsLabel mplsLabel) {
+        super();
         setValue(mplsLabel);
     }
 
@@ -55,7 +52,7 @@ public final class MplsRxFilterValue extends RxFilterValue {
      * @param other a source MplsRxFilterValue object
      */
     public MplsRxFilterValue(MplsRxFilterValue other) {
-        super(other.cpuId);
+        super();
         setValue(other.value());
     }
 

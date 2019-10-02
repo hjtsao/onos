@@ -16,26 +16,26 @@
 
 package org.onosproject.p4runtime.model;
 
-import org.onosproject.net.pi.model.PiPacketMetadataId;
-import org.onosproject.net.pi.model.PiPacketMetadataModel;
+import org.onosproject.net.pi.model.PiControlMetadataId;
+import org.onosproject.net.pi.model.PiControlMetadataModel;
 
 import java.util.Objects;
 
 /**
- * Implementation of PiPacketMetadataModel for P4Runtime.
+ * Implementation of PiControlMetadataModel for P4Runtime.
  */
-final class P4PacketMetadataModel implements PiPacketMetadataModel {
+final class P4ControlMetadataModel implements PiControlMetadataModel {
 
-    private final PiPacketMetadataId id;
+    private final PiControlMetadataId id;
     private final int bitWidth;
 
-    P4PacketMetadataModel(PiPacketMetadataId id, int bitWidth) {
+    P4ControlMetadataModel(PiControlMetadataId id, int bitWidth) {
         this.id = id;
         this.bitWidth = bitWidth;
     }
 
     @Override
-    public PiPacketMetadataId id() {
+    public PiControlMetadataId id() {
         return id;
     }
 
@@ -57,7 +57,7 @@ final class P4PacketMetadataModel implements PiPacketMetadataModel {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        final P4PacketMetadataModel other = (P4PacketMetadataModel) obj;
+        final P4ControlMetadataModel other = (P4ControlMetadataModel) obj;
         return Objects.equals(this.id, other.id)
                 && Objects.equals(this.bitWidth, other.bitWidth);
     }

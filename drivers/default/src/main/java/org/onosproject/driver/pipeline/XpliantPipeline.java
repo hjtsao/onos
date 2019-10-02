@@ -22,8 +22,6 @@ import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.driver.pipeline.ofdpa.Ofdpa3Pipeline;
 import java.util.Collection;
 
-import static org.onosproject.driver.pipeline.ofdpa.OfdpaPipelineUtility.ACL_TABLE;
-
 public class XpliantPipeline extends Ofdpa3Pipeline {
 
     @Override
@@ -55,11 +53,6 @@ public class XpliantPipeline extends Ofdpa3Pipeline {
 
     @Override
     public boolean requireMplsTtlModification() {
-        return false;
-    }
-
-    @Override
-    protected boolean requireEthType() {
         return false;
     }
 }

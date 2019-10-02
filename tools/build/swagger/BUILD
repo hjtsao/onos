@@ -8,8 +8,8 @@ COMPILE_DEPS = JACKSON + [
 
 java_binary(
     name = SWAGGER_EXECUTABLE,
-    srcs = glob(["src/main/java/org/onosproject/swagger/SwaggerGenerator.java"]),
-    main_class = "org.onosproject.swagger.SwaggerGenerator",
+    srcs = glob(["src/main/java/org/onosproject/onosjar/SwaggerGenerator.java"]),
+    main_class = "org.onosproject.onosjar.SwaggerGenerator",
     resources = glob(["src/main/resources/registrator.javat"]),
     visibility = ["//visibility:public"],
     deps = COMPILE_DEPS,

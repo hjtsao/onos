@@ -16,9 +16,7 @@
 package org.onosproject.driver.pipeline.ofdpa;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.apache.commons.lang3.tuple.Pair;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.packet.EthType;
 import org.onlab.packet.Ethernet;
@@ -27,8 +25,6 @@ import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
-import org.onlab.util.AbstractAccumulator;
-import org.onlab.util.Accumulator;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -60,6 +56,8 @@ import org.onosproject.net.flow.criteria.Criteria;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.EthTypeCriterion;
+import org.onosproject.net.flow.criteria.ExtensionCriterion;
+import org.onosproject.net.flow.criteria.ExtensionSelector;
 import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.Icmpv6CodeCriterion;
 import org.onosproject.net.flow.criteria.Icmpv6TypeCriterion;
@@ -74,6 +72,8 @@ import org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import org.onosproject.net.flow.instructions.Instructions.NoActionInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModVlanIdInstruction;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModEtherInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModMplsHeaderInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction.L3SubType;
@@ -98,13 +98,10 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Timer;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.concurrent.Executors.newScheduledThreadPool;
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.packet.MacAddress.BROADCAST;
 import static org.onlab.packet.MacAddress.IPV4_MULTICAST;
 import static org.onlab.packet.MacAddress.IPV6_MULTICAST;
@@ -113,8 +110,7 @@ import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.driver.extensions.Ofdpa3CopyField.OXM_ID_PACKET_REG_1;
 import static org.onosproject.driver.extensions.Ofdpa3CopyField.OXM_ID_VLAN_VID;
 import static org.onosproject.driver.pipeline.ofdpa.OfdpaGroupHandlerUtility.*;
-import static org.onosproject.driver.pipeline.ofdpa.OfdpaPipelineUtility.*;
-import static org.onosproject.net.flowobjective.ForwardingObjective.Flag.SPECIFIC;
+import static org.onosproject.net.flow.criteria.Criterion.Type.ETH_TYPE;
 import static org.onosproject.net.group.GroupDescription.Type.SELECT;
 import static org.slf4j.LoggerFactory.getLogger;
 import static org.onosproject.net.flow.criteria.Criterion.Type.MPLS_BOS;
@@ -123,10 +119,42 @@ import static org.onosproject.net.flow.criteria.Criterion.Type.MPLS_BOS;
  * Driver for Broadcom's OF-DPA v2.0 TTP.
  */
 public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeliner {
-    // Timer for the accumulator
-    private static final Timer TIMER = new Timer("fwdobj-batching");
-    private Accumulator<Pair<ForwardingObjective, Collection<FlowRule>>> accumulator;
-    // Internal objects
+    protected static final int PORT_TABLE = 0;
+    protected static final int VLAN_TABLE = 10;
+    protected static final int VLAN_1_TABLE = 11;
+    protected static final int MPLS_L2_PORT_FLOW_TABLE = 13;
+    protected static final int MPLS_L2_PORT_PCP_TRUST_FLOW_TABLE = 16;
+    protected static final int TMAC_TABLE = 20;
+    protected static final int UNICAST_ROUTING_TABLE = 30;
+    protected static final int MULTICAST_ROUTING_TABLE = 40;
+    protected static final int MPLS_TABLE_0 = 23;
+    protected static final int MPLS_TABLE_1 = 24;
+    protected static final int MPLS_L3_TYPE_TABLE = 27;
+    protected static final int MPLS_TYPE_TABLE = 29;
+    protected static final int BRIDGING_TABLE = 50;
+    protected static final int ACL_TABLE = 60;
+    protected static final int EGRESS_VLAN_FLOW_TABLE = 210;
+    protected static final int EGRESS_DSCP_PCP_REMARK_FLOW_TABLE = 230;
+    protected static final int EGRESS_TPID_FLOW_TABLE = 235;
+    protected static final int MAC_LEARNING_TABLE = 254;
+    protected static final long OFPP_MAX = 0xffffff00L;
+
+    protected static final int HIGHEST_PRIORITY = 0xffff;
+    protected static final int DEFAULT_PRIORITY = 0x8000;
+    protected static final int LOWEST_PRIORITY = 0x0;
+
+    protected static final int MPLS_L2_PORT_PRIORITY = 2;
+    protected static final int MPLS_TUNNEL_ID_BASE = 0x10000;
+    protected static final int MPLS_TUNNEL_ID_MAX = 0x1FFFF;
+
+    protected static final int MPLS_UNI_PORT_MAX = 0x0000FFFF;
+    protected static final int MPLS_NNI_PORT_BASE = 0x00020000;
+    protected static final int MPLS_NNI_PORT_MAX = 0x0002FFFF;
+
+    protected static final short ALLOW_VLAN_TRANSLATION = 1;
+    protected static final int COPY_FIELD_NBITS = 12;
+    protected static final int COPY_FIELD_OFFSET = 0;
+
     private final Logger log = getLogger(getClass());
     protected ServiceDirectory serviceDirectory;
     protected FlowRuleService flowRuleService;
@@ -147,12 +175,10 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
     protected Ofdpa2GroupHandler groupHandler;
 
     // flows installations to be retried
-    private ScheduledExecutorService retryExecutorService
+    private ScheduledExecutorService executorService
         = newScheduledThreadPool(5, groupedThreads("OfdpaPipeliner", "retry-%d", log));
-
-    // accumulator executor service
-    private ScheduledExecutorService accumulatorExecutorService
-        = newSingleThreadScheduledExecutor(groupedThreads("OfdpaPipeliner", "acc-%d", log));
+    private static final int MAX_RETRY_ATTEMPTS = 10;
+    private static final int RETRY_MS = 1000;
 
     @Override
     public void init(DeviceId deviceId, PipelinerContext context) {
@@ -164,25 +190,11 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         groupService = serviceDirectory.get(GroupService.class);
         flowObjectiveStore = context.store();
         deviceService = serviceDirectory.get(DeviceService.class);
-        // Init the accumulator, if enabled
-        if (isAccumulatorEnabled(this)) {
-            accumulator = new ForwardingObjectiveAccumulator(context.accumulatorMaxObjectives(),
-                                                             context.accumulatorMaxBatchMillis(),
-                                                             context.accumulatorMaxIdleMillis());
-        }
 
         initDriverId();
         initGroupHander(context);
 
         initializePipeline();
-    }
-
-    void setupAccumulatorForTests(int maxFwd, int maxBatchMS, int maxIdleMS) {
-        if (accumulator == null) {
-            accumulator = new ForwardingObjectiveAccumulator(maxFwd,
-                                                             maxBatchMS,
-                                                             maxIdleMS);
-        }
     }
 
     protected void initDriverId() {
@@ -207,15 +219,6 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
      * @return true to use MPLS POP instruction
      */
     public boolean requireMplsPop() {
-        return true;
-    }
-
-    /**
-     * Determines whether this pipeline requires one additional flow matching on ethType 0x86dd in ACL table.
-     *
-     * @return true to create one additional flow matching on ethType 0x86dd in ACL table
-     */
-    protected boolean requireEthType() {
         return true;
     }
 
@@ -293,10 +296,6 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         return true;
     }
 
-    protected boolean requirePuntTable() {
-        return false;
-    }
-
     //////////////////////////////////////
     //  Flow Objectives
     //////////////////////////////////////
@@ -326,58 +325,38 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
             // generated by FlowRule service for empty flowOps.
             return;
         }
-        // Let's accumulate flow rules if accumulator is active and fwd objective is not versatile.
-        // Otherwise send directly, without adding futher delay
-        if (accumulator != null && Objects.equals(fwd.flag(), SPECIFIC)) {
-            accumulator.add(Pair.of(fwd, rules));
-        } else {
-            sendForwards(Collections.singletonList(Pair.of(fwd, rules)));
-        }
+        sendForward(fwd, rules);
     }
 
-    // Builds the batch using the accumulated flow rules
-    private void sendForwards(List<Pair<ForwardingObjective, Collection<FlowRule>>> pairs) {
+    private void sendForward(ForwardingObjective fwd, Collection<FlowRule> rules) {
         FlowRuleOperations.Builder flowOpsBuilder = FlowRuleOperations.builder();
-        log.debug("Sending {} fwd-objs", pairs.size());
-        List<Objective> fwdObjs = Lists.newArrayList();
-        // Iterates over all accumulated flow rules and then build an unique batch
-        pairs.forEach(pair -> {
-            ForwardingObjective fwd = pair.getLeft();
-            Collection<FlowRule> rules = pair.getRight();
-            switch (fwd.op()) {
-                case ADD:
-                    rules.stream()
-                            .filter(Objects::nonNull)
-                            .forEach(flowOpsBuilder::add);
-                    log.debug("Applying a add fwd-obj {} to sw:{}", fwd.id(), deviceId);
-                    fwdObjs.add(fwd);
-                    break;
-                case REMOVE:
-                    rules.stream()
-                            .filter(Objects::nonNull)
-                            .forEach(flowOpsBuilder::remove);
-                    log.debug("Deleting a flow rule to sw:{}", deviceId);
-                    fwdObjs.add(fwd);
-                    break;
-                default:
-                    fail(fwd, ObjectiveError.UNKNOWN);
-                    log.warn("Unknown forwarding type {}", fwd.op());
-            }
-        });
-        // Finally applies the operations
-        flowRuleService.apply(flowOpsBuilder.build(new FlowRuleOperationsContext() {
+        switch (fwd.op()) {
+        case ADD:
+            rules.stream()
+            .filter(Objects::nonNull)
+            .forEach(flowOpsBuilder::add);
+            log.debug("Applying a add fwd-obj {} to sw:{}", fwd.id(), deviceId);
+            break;
+        case REMOVE:
+            rules.stream()
+            .filter(Objects::nonNull)
+            .forEach(flowOpsBuilder::remove);
+            log.debug("Deleting a flow rule to sw:{}", deviceId);
+            break;
+        default:
+            fail(fwd, ObjectiveError.UNKNOWN);
+            log.warn("Unknown forwarding type {}", fwd.op());
+        }
 
+        flowRuleService.apply(flowOpsBuilder.build(new FlowRuleOperationsContext() {
             @Override
             public void onSuccess(FlowRuleOperations ops) {
-                log.trace("Flow rule operations onSuccess {}", ops);
-                fwdObjs.forEach(OfdpaPipelineUtility::pass);
+                pass(fwd);
             }
 
             @Override
             public void onError(FlowRuleOperations ops) {
-                ObjectiveError error = ObjectiveError.FLOWINSTALLATIONFAILED;
-                log.warn("Flow rule operations onError {}. Reason = {}", ops, error);
-                fwdObjs.forEach(fwdObj -> fail(fwdObj, error));
+                fail(fwd, ObjectiveError.FLOWINSTALLATIONFAILED);
             }
         }));
     }
@@ -442,8 +421,8 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
                          nextObjective.id(), deviceId);
                 return;
             }
-            log.debug("Processing NextObjective id {} in dev {} group {} - modify bucket",
-                      nextObjective.id(), deviceId, nextGroup);
+            log.debug("Processing NextObjective id {} in dev {} - modify bucket",
+                      nextObjective.id(), deviceId);
             groupHandler.modifyBucketFromGroup(nextObjective, nextGroup);
             break;
         case VERIFY:
@@ -567,7 +546,7 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
             log.info("filtering objective missing VLAN, cannot program VLAN Table");
         } else {
             List<List<FlowRule>> allStages = processVlanIdFilter(
-                    portCriterion, vidCriterion, assignedVlan, applicationId, install);
+                    portCriterion, vidCriterion, assignedVlan, applicationId);
             for (List<FlowRule> flowRules : allStages) {
                 log.trace("Starting a new flow rule stage for VLAN table flow");
                 ops.newStage();
@@ -615,14 +594,12 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
      * @param vidCriterion        vlan assigned to port, or NONE for untagged
      * @param assignedVlan        assigned vlan-id for untagged packets
      * @param applicationId       for application programming this filter
-     * @param install   indicates whether to add or remove the objective
      * @return stages of flow rules for port-vlan filters
      */
     protected List<List<FlowRule>> processVlanIdFilter(PortCriterion portCriterion,
-                                                       VlanIdCriterion vidCriterion,
-                                                       VlanId assignedVlan,
-                                                       ApplicationId applicationId,
-                                                       boolean install) {
+                                                 VlanIdCriterion vidCriterion,
+                                                 VlanId assignedVlan,
+                                                 ApplicationId applicationId) {
         List<FlowRule> filteringRules = new ArrayList<>();
         List<FlowRule> assignmentRules = new ArrayList<>();
         TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
@@ -712,8 +689,7 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
                 filteringRules.add(preRule);
             }
         }
-        return install ? ImmutableList.of(filteringRules, assignmentRules) :
-                ImmutableList.of(assignmentRules, filteringRules);
+        return ImmutableList.of(filteringRules, assignmentRules);
     }
 
     /**
@@ -1183,8 +1159,6 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
     protected Collection<FlowRule> processVersatile(ForwardingObjective fwd) {
         log.debug("Processing versatile forwarding objective:{} in dev:{}",
                  fwd.id(), deviceId);
-        List<FlowRule> flowRules = new ArrayList<>();
-        final AtomicBoolean ethTypeUsed  = new AtomicBoolean(false);
 
         if (fwd.nextId() == null && fwd.treatment() == null) {
             log.error("Forwarding objective {} from {} must contain "
@@ -1232,54 +1206,11 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
                 } else {
                     sbuilder.add(criterion);
                 }
-            } else if (criterion instanceof EthTypeCriterion) {
-                sbuilder.add(criterion);
-                ethTypeUsed.set(true);
             } else {
                 sbuilder.add(criterion);
             }
         });
 
-        TrafficTreatment.Builder ttBuilder = versatileTreatmentBuilder(fwd);
-        if (ttBuilder == null) {
-            return Collections.emptySet();
-        }
-
-        FlowRule.Builder ruleBuilder = DefaultFlowRule.builder()
-                .fromApp(fwd.appId())
-                .withPriority(fwd.priority())
-                .forDevice(deviceId)
-                .withSelector(sbuilder.build())
-                .withTreatment(ttBuilder.build())
-                .makePermanent()
-                .forTable(ACL_TABLE);
-
-        flowRules.add(ruleBuilder.build());
-
-        if (!ethTypeUsed.get() && requireEthType()) {
-            log.debug("{} doesn't match on ethType but requireEthType is true, adding complementary ACL flow.",
-                      sbuilder.toString());
-            sbuilder.matchEthType(Ethernet.TYPE_IPV6);
-            FlowRule.Builder ethTypeRuleBuilder = DefaultFlowRule.builder()
-                    .fromApp(fwd.appId())
-                    .withPriority(fwd.priority())
-                    .forDevice(deviceId)
-                    .withSelector(sbuilder.build())
-                    .withTreatment(ttBuilder.build())
-                    .makePermanent()
-                    .forTable(ACL_TABLE);
-            flowRules.add(ethTypeRuleBuilder.build());
-        }
-        return flowRules;
-    }
-
-    /**
-     * Helper function to create traffic treatment builder for versatile forwarding objectives.
-     *
-     * @param fwd original forwarding objective
-     * @return treatment builder for the flow rule, or null if there is an error.
-     */
-    protected TrafficTreatment.Builder versatileTreatmentBuilder(ForwardingObjective fwd) {
         // XXX driver does not currently do type checking as per Tables 65-67 in
         // OFDPA 2.0 spec. The only allowed treatment is a punt to the controller.
         TrafficTreatment.Builder ttBuilder = DefaultTrafficTreatment.builder();
@@ -1304,24 +1235,33 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
             }
         }
         if (fwd.nextId() != null) {
-            // Override case
+            // overide case
             NextGroup next = getGroupForNextObjective(fwd.nextId());
             if (next == null) {
                 fail(fwd, ObjectiveError.BADPARAMS);
-                return null;
+                return Collections.emptySet();
             }
             List<Deque<GroupKey>> gkeys = appKryo.deserialize(next.data());
             // we only need the top level group's key to point the flow to it
             Group group = groupService.getGroup(deviceId, gkeys.get(0).peekFirst());
             if (group == null) {
                 log.warn("Group with key:{} for next-id:{} not found in dev:{}",
-                        gkeys.get(0).peekFirst(), fwd.nextId(), deviceId);
+                         gkeys.get(0).peekFirst(), fwd.nextId(), deviceId);
                 fail(fwd, ObjectiveError.GROUPMISSING);
-                return null;
+                return Collections.emptySet();
             }
             ttBuilder.deferred().group(group.id());
         }
-        return ttBuilder;
+
+        FlowRule.Builder ruleBuilder = DefaultFlowRule.builder()
+                .fromApp(fwd.appId())
+                .withPriority(fwd.priority())
+                .forDevice(deviceId)
+                .withSelector(sbuilder.build())
+                .withTreatment(ttBuilder.build())
+                .makePermanent()
+                .forTable(ACL_TABLE);
+        return Collections.singletonList(ruleBuilder.build());
     }
 
     /**
@@ -1560,7 +1500,7 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         }
 
         if (emptyGroup) {
-            retryExecutorService.schedule(new RetryFlows(fwd, flowRuleCollection),
+            executorService.schedule(new RetryFlows(fwd, flowRuleCollection),
                                      RETRY_MS, TimeUnit.MILLISECONDS);
         }
         return flowRuleCollection;
@@ -1811,6 +1751,14 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         return null;
     }
 
+    protected static void pass(Objective obj) {
+        obj.context().ifPresent(context -> context.onSuccess(obj));
+    }
+
+    protected static void fail(Objective obj, ObjectiveError error) {
+        obj.context().ifPresent(context -> context.onError(obj, error));
+    }
+
     @Override
     public List<String> getNextMappings(NextGroup nextGroup) {
         List<String> mappings = new ArrayList<>();
@@ -1845,6 +1793,119 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
     }
 
     /**
+     * Returns true iff the given selector matches on BOS==true, indicating that
+     * the selector is trying to match on a label that is bottom-of-stack.
+     *
+     * @param selector the given match
+     * @return true iff BoS==true; false if BOS==false, or BOS matching is not
+     *         expressed in the given selector
+     */
+    static boolean isMplsBos(TrafficSelector selector) {
+        MplsBosCriterion bosCriterion = (MplsBosCriterion) selector.getCriterion(MPLS_BOS);
+        return bosCriterion != null && bosCriterion.mplsBos();
+    }
+
+    /**
+     * Returns true iff the given selector matches on BOS==false, indicating
+     * that the selector is trying to match on a label that is not the
+     * bottom-of-stack label.
+     *
+     * @param selector the given match
+     * @return true iff BoS==false;
+     *         false if BOS==true, or BOS matching is not expressed in the given selector
+     */
+    static boolean isNotMplsBos(TrafficSelector selector) {
+        MplsBosCriterion bosCriterion = (MplsBosCriterion) selector.getCriterion(MPLS_BOS);
+        return bosCriterion != null && !bosCriterion.mplsBos();
+    }
+
+    /**
+     * Returns true iff the forwarding objective includes a treatment to pop the
+     * MPLS label.
+     *
+     * @param fwd the given forwarding objective
+     * @return true iff mpls pop treatment exists
+     */
+    static boolean isMplsPop(ForwardingObjective fwd) {
+        if (fwd.treatment() != null) {
+            for (Instruction instr : fwd.treatment().allInstructions()) {
+                if (instr instanceof L2ModificationInstruction
+                        && ((L2ModificationInstruction) instr)
+                                .subtype() == L2SubType.MPLS_POP) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isIpv6(TrafficSelector selector) {
+        EthTypeCriterion ethTypeCriterion = (EthTypeCriterion) selector.getCriterion(ETH_TYPE);
+        return ethTypeCriterion != null && ethTypeCriterion.ethType().toShort() == Ethernet.TYPE_IPV6;
+    }
+
+    static VlanId readVlanFromSelector(TrafficSelector selector) {
+        if (selector == null) {
+            return null;
+        }
+        Criterion criterion = selector.getCriterion(Criterion.Type.VLAN_VID);
+        return (criterion == null)
+                ? null : ((VlanIdCriterion) criterion).vlanId();
+    }
+
+    static MacAddress readEthDstFromSelector(TrafficSelector selector) {
+        if (selector == null) {
+            return null;
+        }
+        Criterion criterion = selector.getCriterion(Criterion.Type.ETH_DST);
+        return (criterion == null)
+                ? null : ((EthCriterion) criterion).mac();
+    }
+
+    static IpPrefix readIpDstFromSelector(TrafficSelector selector) {
+        if (selector == null) {
+            return null;
+        }
+        Criterion criterion = selector.getCriterion(Criterion.Type.IPV4_DST);
+        return (criterion == null) ? null : ((IPCriterion) criterion).ip();
+    }
+
+    private static VlanId readVlanFromTreatment(TrafficTreatment treatment) {
+        if (treatment == null) {
+            return null;
+        }
+        for (Instruction i : treatment.allInstructions()) {
+            if (i instanceof ModVlanIdInstruction) {
+                return ((ModVlanIdInstruction) i).vlanId();
+            }
+        }
+        return null;
+    }
+
+    protected static MacAddress readEthDstFromTreatment(TrafficTreatment treatment) {
+        if (treatment == null) {
+            return null;
+        }
+        for (Instruction i : treatment.allInstructions()) {
+            if (i instanceof ModEtherInstruction) {
+                ModEtherInstruction modEtherInstruction = (ModEtherInstruction) i;
+                if (modEtherInstruction.subtype() == L2SubType.ETH_DST) {
+                    return modEtherInstruction.mac();
+                }
+            }
+        }
+        return null;
+    }
+
+    static ExtensionSelector readExtensionFromSelector(TrafficSelector selector) {
+        if (selector == null) {
+            return null;
+        }
+        ExtensionCriterion criterion = (ExtensionCriterion) selector.getCriterion(Criterion.Type.EXTENSION);
+        return (criterion == null) ? null : criterion.extensionSelector();
+    }
+
+    /**
      *  Utility class that retries sending flows a fixed number of times, even if
      *  some of the attempts are successful. Used only for forwarding objectives.
      */
@@ -1862,42 +1923,9 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         public void run() {
             log.info("RETRY FLOWS ATTEMPT# {} for fwd:{} rules:{}",
                      MAX_RETRY_ATTEMPTS - attempts, fwd.id(), retryFlows.size());
-            sendForwards(Collections.singletonList(Pair.of(fwd, retryFlows)));
+            sendForward(fwd, retryFlows);
             if (--attempts > 0) {
-                retryExecutorService.schedule(this, RETRY_MS, TimeUnit.MILLISECONDS);
-            }
-        }
-    }
-
-    // Flow rules accumulator for reducing the number of transactions required to the devices.
-    private final class ForwardingObjectiveAccumulator
-            extends AbstractAccumulator<Pair<ForwardingObjective, Collection<FlowRule>>> {
-
-        ForwardingObjectiveAccumulator(int maxFwd, int maxBatchMS, int maxIdleMS) {
-            super(TIMER, maxFwd, maxBatchMS, maxIdleMS);
-        }
-
-        @Override
-        public void processItems(List<Pair<ForwardingObjective, Collection<FlowRule>>> pairs) {
-            // Triggers creation of a batch using the list of flowrules generated from fwdobjs.
-            accumulatorExecutorService.execute(new FlowRulesBuilderTask(pairs));
-        }
-    }
-
-    // Task for building batch of flow rules in a separate thread.
-    private final class FlowRulesBuilderTask implements Runnable {
-        private final List<Pair<ForwardingObjective, Collection<FlowRule>>> pairs;
-
-        FlowRulesBuilderTask(List<Pair<ForwardingObjective, Collection<FlowRule>>> pairs) {
-            this.pairs = pairs;
-        }
-
-        @Override
-        public void run() {
-            try {
-                sendForwards(pairs);
-            } catch (Exception e) {
-                log.warn("Unable to send forwards", e);
+                executorService.schedule(this, RETRY_MS, TimeUnit.MILLISECONDS);
             }
         }
     }

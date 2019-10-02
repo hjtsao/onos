@@ -17,7 +17,6 @@
 package org.onosproject.net.pi.service;
 
 import com.google.common.annotations.Beta;
-import org.onosproject.event.ListenerService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.model.PiPipeconfId;
@@ -28,12 +27,12 @@ import java.util.Optional;
  * A service to manage the configurations of protocol-independent pipelines.
  */
 @Beta
-public interface PiPipeconfService extends ListenerService<PiPipeconfEvent, PiPipeconfListener> {
+public interface PiPipeconfService {
 
     // TODO: we might want to extend ListenerService to support the broadcasting of PipeconfEvent.
 
     /**
-     * Registers the given pipeconf making it available to other subsystems.
+     * Registers the given pipeconf.
      *
      * @param pipeconf a pipeconf
      * @throws IllegalStateException if the same pipeconf identifier is already
@@ -42,14 +41,17 @@ public interface PiPipeconfService extends ListenerService<PiPipeconfEvent, PiPi
     void register(PiPipeconf pipeconf) throws IllegalStateException;
 
     /**
-     * Unregisters the given pipeconf. Once unregistered, other subsystems will
-     * not be able to access the pipeconf content.
+     * Unregisters the Pipeconf identified by the given PiPipeconfId.
+     * Unregistering a Pipeconf removes it from the ONOS controller, thus making
+     * it un-capable of controlling (e.g installing flow rules) the devices that
+     * have the pipeconf's P4 program deployed. For now this method DOES NOT
+     * remove the P4 program from the devices.
      *
      * @param pipeconfId a pipeconfId
      * @throws IllegalStateException if the same pipeconf identifier is already
      *                               registered.
      */
-    void unregister(PiPipeconfId pipeconfId) throws IllegalStateException;
+    void remove(PiPipeconfId pipeconfId) throws IllegalStateException;
 
     /**
      * Returns all pipeconfs registered.
@@ -67,16 +69,6 @@ public interface PiPipeconfService extends ListenerService<PiPipeconfEvent, PiPi
      * @return an optional pipeconf
      */
     Optional<PiPipeconf> getPipeconf(PiPipeconfId id);
-
-    /**
-     * Returns the pipeconf instance associated with the given device, if
-     * present. If not present, it means no pipeconf has been associated with
-     * that device so far.
-     *
-     * @param deviceId a device identifier
-     * @return an optional pipeconf
-     */
-    Optional<PiPipeconf> getPipeconf(DeviceId deviceId);
 
     /**
      * Signals that the given pipeconf is associated to the given infrastructure
@@ -115,9 +107,7 @@ public interface PiPipeconfService extends ListenerService<PiPipeconfEvent, PiPi
      *
      * @param deviceId device identifier
      * @return an optional pipeconf identifier
-     * @deprecated in ONOS 2.1 use {@link #getPipeconf(DeviceId)} instead
      */
-    @Deprecated
     Optional<PiPipeconfId> ofDevice(DeviceId deviceId);
 
 }

@@ -34,10 +34,8 @@ import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.AbstractProjectableModel;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DefaultDevice;
-import org.onosproject.net.DefaultPort;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
@@ -77,14 +75,12 @@ import org.onosproject.netconf.config.NetconfDeviceConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Collectors;
 
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
@@ -214,7 +210,7 @@ public class NetconfDeviceProviderTest {
         assertTrue("Incorrect config factories", cfgFactories.contains(provider.factory));
         assertNotNull("Device listener should be added", deviceService.listener);
         assertFalse("Thread to connect device should be running",
-                    provider.connectionExecutor.isShutdown() || provider.connectionExecutor.isTerminated());
+                    provider.executor.isShutdown() || provider.executor.isTerminated());
         assertFalse("Scheduled task to update device should be running", provider.scheduledTask.isCancelled());
     }
 
@@ -223,7 +219,7 @@ public class NetconfDeviceProviderTest {
         provider.deactivate();
         assertNull("Device listener should be removed", deviceService.listener);
         assertFalse("Provider should not be registered", deviceRegistry.getProviders().contains(provider.id()));
-        assertTrue("Thread to connect device should be shutdown", provider.connectionExecutor.isShutdown());
+        assertTrue("Thread to connect device should be shutdown", provider.executor.isShutdown());
         assertTrue("Scheduled task to update device should be shutdown", provider.scheduledTask.isCancelled());
         assertNull("Provider service should be null", provider.providerService);
         assertTrue("Network config factories not removed", cfgFactories.isEmpty());
@@ -274,7 +270,7 @@ public class NetconfDeviceProviderTest {
 
     @Test
     public void testDiscoverPortsAfterDeviceAdded() {
-        provider.connectionExecutor = MoreExecutors.newDirectExecutorService();
+        provider.executor = MoreExecutors.newDirectExecutorService();
         prepareMocks(PORT_COUNT);
 
         deviceService.listener.event(new DeviceEvent(DeviceEvent.Type.DEVICE_ADDED, netconfDevice));
@@ -289,13 +285,6 @@ public class NetconfDeviceProviderTest {
             deviceDescription.portDescriptions.add(DefaultPortDescription.builder()
                     .withPortNumber(PortNumber.portNumber(i)).isEnabled(true).build());
         }
-    }
-
-    private List<Port> createMockPorts(Collection<PortDescription> descs, DeviceId deviceId) {
-        Device device = deviceService.getDevice(deviceId);
-        return descs.stream()
-                .map(desc -> new DefaultPort(device, desc.portNumber(), desc.isEnabled(), desc.annotations()))
-                .collect(Collectors.toList());
     }
 
     //TODO: check updates of the device description
@@ -362,11 +351,6 @@ public class NetconfDeviceProviderTest {
                 return notNetconfDevice;
             }
 
-        }
-
-        @Override
-        public List<Port> getPorts(DeviceId deviceId) {
-            return createMockPorts(providerService.ports.get(deviceId), deviceId);
         }
 
         @Override

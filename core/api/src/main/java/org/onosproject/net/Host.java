@@ -73,7 +73,6 @@ public interface Host extends Element {
 
     /**
      * Returns true if configured by NetworkConfiguration.
-     *
      * @return configured/learnt dynamically
      */
     default boolean configured() {
@@ -98,13 +97,5 @@ public interface Host extends Element {
         return EthType.EtherType.UNKNOWN.ethType();
     }
     // TODO: explore capturing list of recent locations to aid in mobility
-
-    /**
-     * Returns the state of host whether it is in suspended state(offending host due to frequent movement.).
-     *
-     * @return state true if suspended else false.
-     */
-    boolean suspended();
-
 
 }

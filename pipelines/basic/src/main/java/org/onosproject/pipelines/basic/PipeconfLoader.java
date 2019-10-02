@@ -17,7 +17,13 @@
 package org.onosproject.pipelines.basic;
 
 import com.google.common.collect.ImmutableList;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.core.CoreService;
+import org.onosproject.driver.pipeline.DefaultSingleTablePipeline;
 import org.onosproject.inbandtelemetry.api.IntProgrammable;
 import org.onosproject.net.behaviour.Pipeliner;
 import org.onosproject.net.device.PortStatisticsDiscovery;
@@ -29,11 +35,6 @@ import org.onosproject.net.pi.model.PiPipelineModel;
 import org.onosproject.net.pi.service.PiPipeconfService;
 import org.onosproject.p4runtime.model.P4InfoParser;
 import org.onosproject.p4runtime.model.P4InfoParserException;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 
 import java.net.URL;
 import java.util.Collection;
@@ -50,22 +51,22 @@ public final class PipeconfLoader {
     private static final String APP_NAME = "org.onosproject.pipelines.basic";
     private static final PiPipeconfId BASIC_PIPECONF_ID = new PiPipeconfId("org.onosproject.pipelines.basic");
     private static final String BASIC_JSON_PATH = "/p4c-out/bmv2/basic.json";
-    private static final String BASIC_P4INFO = "/p4c-out/bmv2/basic_p4info.txt";
+    private static final String BASIC_P4INFO = "/p4c-out/bmv2/basic.p4info";
 
     public static final PiPipeconf BASIC_PIPECONF = buildBasicPipeconf();
 
     private static final PiPipeconfId INT_PIPECONF_ID = new PiPipeconfId("org.onosproject.pipelines.int");
     private static final String INT_JSON_PATH = "/p4c-out/bmv2/int.json";
-    private static final String INT_P4INFO = "/p4c-out/bmv2/int_p4info.txt";
+    private static final String INT_P4INFO = "/p4c-out/bmv2/int.p4info";
 
     public static final PiPipeconf INT_PIPECONF = buildIntPipeconf();
 
     private static final Collection<PiPipeconf> ALL_PIPECONFS = ImmutableList.of(BASIC_PIPECONF, INT_PIPECONF);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiPipeconfService piPipeconfService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private CoreService coreService;
 
     @Activate
@@ -77,7 +78,7 @@ public final class PipeconfLoader {
 
     @Deactivate
     public void deactivate() {
-        ALL_PIPECONFS.stream().map(PiPipeconf::id).forEach(piPipeconfService::unregister);
+        ALL_PIPECONFS.stream().map(PiPipeconf::id).forEach(piPipeconfService::remove);
     }
 
     private static PiPipeconf buildBasicPipeconf() {
@@ -88,7 +89,7 @@ public final class PipeconfLoader {
                 .withId(BASIC_PIPECONF_ID)
                 .withPipelineModel(parseP4Info(p4InfoUrl))
                 .addBehaviour(PiPipelineInterpreter.class, BasicInterpreterImpl.class)
-                .addBehaviour(Pipeliner.class, BasicPipelinerImpl.class)
+                .addBehaviour(Pipeliner.class, DefaultSingleTablePipeline.class)
                 .addBehaviour(PortStatisticsDiscovery.class, PortStatisticsDiscoveryImpl.class)
                 .addExtension(P4_INFO_TEXT, p4InfoUrl)
                 .addExtension(BMV2_JSON, jsonUrl)
@@ -107,7 +108,7 @@ public final class PipeconfLoader {
                 .withId(INT_PIPECONF_ID)
                 .withPipelineModel(parseP4Info(p4InfoUrl))
                 .addBehaviour(PiPipelineInterpreter.class, BasicInterpreterImpl.class)
-                .addBehaviour(Pipeliner.class, BasicPipelinerImpl.class)
+                .addBehaviour(Pipeliner.class, DefaultSingleTablePipeline.class)
                 .addBehaviour(PortStatisticsDiscovery.class, PortStatisticsDiscoveryImpl.class)
                 .addBehaviour(IntProgrammable.class, IntProgrammableImpl.class)
                 .addExtension(P4_INFO_TEXT, p4InfoUrl)

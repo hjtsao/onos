@@ -16,6 +16,12 @@
 
 package org.onosproject.store.key.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.key.DeviceKey;
 import org.onosproject.net.key.DeviceKeyEvent;
 import org.onosproject.net.key.DeviceKeyId;
@@ -28,11 +34,6 @@ import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Arrays;
@@ -46,14 +47,15 @@ import static org.slf4j.LoggerFactory.getLogger;
  * A distributed device key store implementation, device keys are stored consistently
  * across the cluster.
  */
-@Component(immediate = true, service = DeviceKeyStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedDeviceKeyStore
         extends AbstractStore<DeviceKeyEvent, DeviceKeyStoreDelegate>
         implements DeviceKeyStore {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     private ConsistentMap<DeviceKeyId, DeviceKey> deviceKeys;

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-JAVA_DOCS = "-link https://docs.oracle.com/javase/11/docs/api/"
+JAVA_DOCS = "-link https://docs.oracle.com/javase/8/docs/api/"
 
 def dump(obj):
     print(dir(obj))
@@ -21,7 +21,7 @@ def dump(obj):
 
 def _impl(ctx):
     dir = ctx.label.name
-    outjar = ctx.outputs.jar
+    jar = ctx.outputs.jar
 
     classpath = ""
     for dep in ctx.files.deps:
@@ -39,13 +39,9 @@ def _impl(ctx):
             packages += ":" + p
         group_list += " -group \"%s\" %s" % (group, packages.replace(":", "", 1))
 
-    java_runtime = ctx.attr._jdk[java_common.JavaRuntimeInfo]
-    jar_exe_path = "%s/bin/jar" % java_runtime.java_home
-    javadoc_exe_path = "%s/bin/javadoc" % java_runtime.java_home
-
     cmd = [
         "mkdir src; cd src",
-        "for s in %s; do ../%s xf ../$s; done" % (src_list, jar_exe_path),
+        "for s in %s; do jar xf ../$s; done" % src_list,
         "rm -f META-INF/MANIFEST.MF",
         "cd ..",
         "cp -r docs/src/main/javadoc/* .",
@@ -58,18 +54,17 @@ def _impl(ctx):
         cmd += ["find src -type f | egrep -v 'src/(OSGI|WEB)-INF' | egrep -v '/(impl|internal)/' >> FILES"]
 
     cmd += [
-        "%s -encoding UTF-8 -overview overview.html -doctitle '%s' -windowtitle '%s' %s -d apidocs -classpath %s -sourcepath src %s @FILES" %
-        (javadoc_exe_path, ctx.attr.title, ctx.attr.title, group_list, classpath.replace(":", "", 1), JAVA_DOCS),
+        "javadoc -encoding UTF-8 -overview overview.html -doctitle '%s' -windowtitle '%s' %s -d apidocs -classpath %s -sourcepath src %s @FILES" %
+        (ctx.attr.title, ctx.attr.title, group_list, classpath.replace(":", "", 1), JAVA_DOCS),
         "cp -r doc-files apidocs/doc-files",
-        "%s cf %s apidocs" % (jar_exe_path, outjar.path),
+        "jar cf %s apidocs" % jar.path,
     ]
 
-    ctx.actions.run_shell(
+    ctx.action(
         inputs = ctx.files.srcs + ctx.files.deps,
-        outputs = [outjar],
+        outputs = [jar],
         progress_message = "Generating javadocs jar for %s" % ctx.attr.name,
         command = ";\n".join(cmd),
-        tools = java_runtime.files,
     )
 
 project_javadoc = rule(
@@ -80,10 +75,6 @@ project_javadoc = rule(
         "deps": attr.label_list(allow_files = True),
         "srcs": attr.label_list(allow_files = True),
         "internal": attr.bool(default = False),
-        "_jdk": attr.label(
-            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
-            providers = [java_common.JavaRuntimeInfo],
-        ),
     },
     implementation = _impl,
     outputs = {"jar": "%{name}.jar"},

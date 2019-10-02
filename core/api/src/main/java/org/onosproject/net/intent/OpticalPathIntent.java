@@ -41,8 +41,6 @@ public final class OpticalPathIntent extends Intent {
     private final OchSignalType signalType;
     private final boolean isBidirectional;
 
-    public static final String REVERSE_PORT_ANNOTATION_KEY = "reverse-port";
-
     private OpticalPathIntent(ApplicationId appId,
                               Key key,
                               ConnectPoint src,

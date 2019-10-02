@@ -19,164 +19,178 @@ package org.onosproject.grpc.ctl;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Striped;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+
 import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.event.Event;
 import org.onosproject.event.EventListener;
+import org.onosproject.grpc.api.GrpcChannelController;
+import org.onosproject.grpc.api.GrpcChannelId;
 import org.onosproject.grpc.api.GrpcClient;
 import org.onosproject.grpc.api.GrpcClientController;
+import org.onosproject.grpc.api.GrpcClientKey;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.device.DeviceAgentEvent;
-import org.onosproject.net.device.DeviceAgentListener;
-import org.onosproject.net.provider.ProviderId;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.Lock;
 import java.util.function.Supplier;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.lang.String.format;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
- * Abstract class of a controller for gRPC clients which provides means to
- * create clients, associate device agent listeners to them and register other
- * event listeners.
+ * Abstract class of a gRPC based client controller for specific gRPC client
+ * which provides basic gRPC client management and thread safe mechanism.
  *
  * @param <C> the gRPC client type
+ * @param <K> the key type of the gRPC client
  * @param <E> the event type of the gRPC client
  * @param <L> the event listener of event {@link E}
  */
+@Component
 public abstract class AbstractGrpcClientController
-        <C extends GrpcClient, E extends Event, L extends EventListener<E>>
+        <K extends GrpcClientKey, C extends GrpcClient, E extends Event, L extends EventListener<E>>
         extends AbstractListenerManager<E, L>
-        implements GrpcClientController<C> {
+        implements GrpcClientController<K, C> {
 
     /**
      * The default max inbound message size (MB).
      */
+    private static final int DEFAULT_MAX_INBOUND_MSG_SIZE = 256; // Megabytes.
+    private static final int MEGABYTES = 1024 * 1024;
     private static final int DEFAULT_DEVICE_LOCK_SIZE = 30;
 
     private final Logger log = getLogger(getClass());
-    private final Map<DeviceId, C> clients = Maps.newHashMap();
-    private final ConcurrentMap<DeviceId, ConcurrentMap<ProviderId, DeviceAgentListener>>
-            deviceAgentListeners = Maps.newConcurrentMap();
-    private final Class<E> eventClass;
-    private final String serviceName;
+    private final Map<DeviceId, K> clientKeys = Maps.newHashMap();
+    private final Map<K, C> clients = Maps.newHashMap();
+    private final Map<DeviceId, GrpcChannelId> channelIds = Maps.newHashMap();
     private final Striped<Lock> stripedLocks = Striped.lock(DEFAULT_DEVICE_LOCK_SIZE);
 
-    public AbstractGrpcClientController(Class<E> eventClass, String serviceName) {
-        this.eventClass = eventClass;
-        this.serviceName = serviceName;
-    }
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private GrpcChannelController grpcChannelController;
 
     @Activate
     public void activate() {
-        eventDispatcher.addSink(eventClass, listenerRegistry);
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-        eventDispatcher.removeSink(eventClass);
+        clientKeys.keySet().forEach(this::removeClient);
+        clientKeys.clear();
         clients.clear();
-        deviceAgentListeners.clear();
+        channelIds.clear();
         log.info("Stopped");
     }
 
     @Override
-    public boolean create(DeviceId deviceId, ManagedChannel channel) {
-        checkNotNull(deviceId);
-        checkNotNull(channel);
-        return withDeviceLock(() -> doCreateClient(deviceId, channel), deviceId);
+    public boolean createClient(K clientKey) {
+        checkNotNull(clientKey);
+        return withDeviceLock(() -> doCreateClient(clientKey), clientKey.deviceId());
     }
 
-    private boolean doCreateClient(DeviceId deviceId, ManagedChannel channel) {
+    private boolean doCreateClient(K clientKey) {
+        DeviceId deviceId = clientKey.deviceId();
+        String serverAddr = clientKey.serverAddr();
+        int serverPort = clientKey.serverPort();
 
-        if (clients.containsKey(deviceId)) {
-            throw new IllegalArgumentException(format(
-                    "A %s client already exists for %s", serviceName, deviceId));
+        if (clientKeys.containsKey(deviceId)) {
+            final GrpcClientKey existingKey = clientKeys.get(deviceId);
+            if (clientKey.equals(existingKey)) {
+                log.debug("Not creating client for {} as it already exists (key={})...",
+                        deviceId, clientKey);
+                return true;
+            } else {
+                log.info("Requested client for {} with new " +
+                                "endpoint, removing old client (key={})...",
+                        deviceId, clientKey);
+                doRemoveClient(deviceId);
+            }
         }
+        log.info("Creating client for {} (server={}:{})...",
+                deviceId, serverAddr, serverPort);
+        GrpcChannelId channelId = GrpcChannelId.of(clientKey.deviceId(), clientKey.toString());
+        ManagedChannelBuilder channelBuilder = NettyChannelBuilder
+                .forAddress(serverAddr, serverPort)
+                .maxInboundMessageSize(DEFAULT_MAX_INBOUND_MSG_SIZE * MEGABYTES)
+                .usePlaintext();
 
-        log.debug("Creating {}...", clientName(deviceId));
-
-        final C client;
+        ManagedChannel channel;
         try {
-            client = createClientInstance(deviceId, channel);
-        } catch (Throwable e) {
-            log.error("Exception while creating {}", clientName(deviceId), e);
+            channel = grpcChannelController.connectChannel(channelId, channelBuilder);
+        } catch (IOException e) {
+            log.warn("Unable to connect to gRPC server of {}: {}",
+                    clientKey.deviceId(), e.getMessage());
             return false;
         }
 
+        C client = createClientInstance(clientKey, channel);
         if (client == null) {
-            log.error("Unable to create {}, implementation returned null...",
-                      clientName(deviceId));
+            log.warn("Cannot create client for {} (key={})", deviceId, clientKey);
             return false;
         }
+        clientKeys.put(deviceId, clientKey);
+        clients.put(clientKey, client);
+        channelIds.put(deviceId, channelId);
 
-        clients.put(deviceId, client);
         return true;
     }
 
-    protected abstract C createClientInstance(DeviceId deviceId, ManagedChannel channel);
+    protected abstract C createClientInstance(K clientKey, ManagedChannel channel);
 
     @Override
-    public C get(DeviceId deviceId) {
+    public C getClient(DeviceId deviceId) {
         checkNotNull(deviceId);
-        return withDeviceLock(() -> clients.get(deviceId), deviceId);
+        return withDeviceLock(() -> doGetClient(deviceId), deviceId);
     }
 
-    @Override
-    public void remove(DeviceId deviceId) {
-        checkNotNull(deviceId);
-        withDeviceLock(() -> {
-            final C client = clients.remove(deviceId);
-            if (client != null) {
-                log.debug("Removing {}...", clientName(deviceId));
-                client.shutdown();
-            }
+    protected C doGetClient(DeviceId deviceId) {
+        if (!clientKeys.containsKey(deviceId)) {
             return null;
-        }, deviceId);
-    }
-
-    @Override
-    public void addDeviceAgentListener(DeviceId deviceId, ProviderId providerId, DeviceAgentListener listener) {
-        checkNotNull(deviceId, "deviceId cannot be null");
-        checkNotNull(providerId, "providerId cannot be null");
-        checkNotNull(listener, "listener cannot be null");
-        deviceAgentListeners.putIfAbsent(deviceId, Maps.newConcurrentMap());
-        deviceAgentListeners.get(deviceId).put(providerId, listener);
-    }
-
-    @Override
-    public void removeDeviceAgentListener(DeviceId deviceId, ProviderId providerId) {
-        checkNotNull(deviceId, "deviceId cannot be null");
-        checkNotNull(providerId, "listener cannot be null");
-        deviceAgentListeners.computeIfPresent(deviceId, (did, listeners) -> {
-            listeners.remove(providerId);
-            return listeners.isEmpty() ? null : listeners;
-        });
-    }
-
-    public void postEvent(E event) {
-        checkNotNull(event);
-        post(event);
-    }
-
-    public void postEvent(DeviceAgentEvent event) {
-        // We should have only one event delivery mechanism. We have two now
-        // because we have two different types of events, DeviceAgentEvent and
-        // controller/protocol specific ones (e.g. P4Runtime or gNMI).
-        // TODO: extend device agent event to allow delivery of protocol-specific
-        //  events, e.g. packet-in
-        checkNotNull(event);
-        if (deviceAgentListeners.containsKey(event.subject())) {
-            deviceAgentListeners.get(event.subject()).values()
-                    .forEach(l -> l.event(event));
         }
+        return clients.get(clientKeys.get(deviceId));
+    }
+
+    @Override
+    public void removeClient(DeviceId deviceId) {
+        checkNotNull(deviceId);
+        withDeviceLock(() -> doRemoveClient(deviceId), deviceId);
+    }
+
+    private Void doRemoveClient(DeviceId deviceId) {
+        if (clientKeys.containsKey(deviceId)) {
+            final K clientKey = clientKeys.get(deviceId);
+            clients.get(clientKey).shutdown();
+            grpcChannelController.disconnectChannel(channelIds.get(deviceId));
+            clientKeys.remove(deviceId);
+            clients.remove(clientKey);
+            channelIds.remove(deviceId);
+        }
+        return null;
+    }
+
+    @Override
+    public boolean isReachable(DeviceId deviceId) {
+        checkNotNull(deviceId);
+        return withDeviceLock(() -> doIsReachable(deviceId), deviceId);
+    }
+
+    protected boolean doIsReachable(DeviceId deviceId) {
+        // Default behaviour checks only the gRPC channel, should
+        // check according to different gRPC service
+        if (!clientKeys.containsKey(deviceId)) {
+            log.debug("No client for {}, can't check for reachability", deviceId);
+            return false;
+        }
+        return grpcChannelController.isChannelOpen(channelIds.get(deviceId));
     }
 
     private <U> U withDeviceLock(Supplier<U> task, DeviceId deviceId) {
@@ -187,9 +201,5 @@ public abstract class AbstractGrpcClientController
         } finally {
             lock.unlock();
         }
-    }
-
-    private String clientName(DeviceId deviceId) {
-        return format("%s client for %s", serviceName, deviceId);
     }
 }

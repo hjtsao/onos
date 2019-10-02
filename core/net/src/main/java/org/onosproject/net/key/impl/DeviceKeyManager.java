@@ -16,6 +16,12 @@
 
 package org.onosproject.net.key.impl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.net.key.DeviceKey;
 import org.onosproject.net.key.DeviceKeyAdminService;
@@ -25,11 +31,6 @@ import org.onosproject.net.key.DeviceKeyListener;
 import org.onosproject.net.key.DeviceKeyService;
 import org.onosproject.net.key.DeviceKeyStore;
 import org.onosproject.net.key.DeviceKeyStoreDelegate;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Collection;
@@ -42,7 +43,8 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Implementation of device key services.
  */
-@Component(immediate = true, service = { DeviceKeyService.class, DeviceKeyAdminService.class })
+@Component(immediate = true)
+@Service
 public class DeviceKeyManager extends AbstractListenerManager<DeviceKeyEvent, DeviceKeyListener>
         implements DeviceKeyService, DeviceKeyAdminService {
 
@@ -50,7 +52,7 @@ public class DeviceKeyManager extends AbstractListenerManager<DeviceKeyEvent, De
 
     private DeviceKeyStoreDelegate delegate = this::post;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceKeyStore store;
 
     @Activate

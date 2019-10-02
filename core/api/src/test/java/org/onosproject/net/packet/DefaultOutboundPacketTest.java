@@ -18,7 +18,6 @@ package org.onosproject.net.packet;
 import java.nio.ByteBuffer;
 
 import org.junit.Test;
-import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.intent.IntentTestsMocks;
 import org.onlab.packet.Ethernet;
@@ -48,17 +47,10 @@ public class DefaultOutboundPacketTest {
             new DefaultOutboundPacket(did("d1"),
                     treatment,
                     byteBuffer);
-    private final PortNumber inPort = PortNumber.portNumber(1);
-    final DefaultOutboundPacket packet1WithInPort =
-            new DefaultOutboundPacket(did("d1"),
-                    treatment,
-                    byteBuffer,
-                    inPort);
     final DefaultOutboundPacket packet2 =
             new DefaultOutboundPacket(did("d2"),
                     treatment,
                     byteBuffer);
-
     /**
      * Checks that the DefaultOutboundPacket class is immutable.
      */
@@ -75,7 +67,6 @@ public class DefaultOutboundPacketTest {
         new EqualsTester()
                 .addEqualityGroup(packet1, sameAsPacket1)
                 .addEqualityGroup(packet2)
-                .addEqualityGroup(packet1WithInPort)
                 .testEquals();
     }
 
@@ -87,7 +78,5 @@ public class DefaultOutboundPacketTest {
         assertThat(packet1.sendThrough(), equalTo(did("d1")));
         assertThat(packet1.data(), equalTo(byteBuffer));
         assertThat(packet1.treatment(), equalTo(treatment));
-        assertThat(packet1.inPort(), equalTo(null));
-        assertThat(packet1WithInPort.inPort(), equalTo(inPort));
     }
 }

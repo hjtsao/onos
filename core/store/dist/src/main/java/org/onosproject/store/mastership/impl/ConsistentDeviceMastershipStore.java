@@ -15,8 +15,34 @@
  */
 package org.onosproject.store.mastership.impl;
 
-import com.google.common.collect.ImmutableList;
+import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.RESTORED;
+import static org.onosproject.mastership.MastershipEvent.Type.SUSPENDED;
+import static org.slf4j.LoggerFactory.getLogger;
+import static com.google.common.base.Preconditions.checkArgument;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.ImmutableMap;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.Leadership;
@@ -38,54 +64,31 @@ import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.Serializer;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import static com.google.common.base.Preconditions.checkArgument;
-import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
-import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
-import static org.onosproject.mastership.MastershipEvent.Type.RESTORED;
-import static org.onosproject.mastership.MastershipEvent.Type.SUSPENDED;
-import static org.slf4j.LoggerFactory.getLogger;
+import com.google.common.collect.ImmutableList;
 
 /**
  * Implementation of the MastershipStore on top of Leadership Service.
  */
-@Component(immediate = true, service = MastershipStore.class)
+@Component(immediate = true)
+@Service
 public class ConsistentDeviceMastershipStore
     extends AbstractStore<MastershipEvent, MastershipStoreDelegate>
     implements MastershipStore {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LeadershipService leadershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LeadershipAdminService leadershipAdminService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterCommunicationService clusterCommunicator;
 
     private NodeId localNodeId;
@@ -93,10 +96,8 @@ public class ConsistentDeviceMastershipStore
     private static final MessageSubject ROLE_RELINQUISH_SUBJECT =
             new MessageSubject("mastership-store-device-role-relinquish");
 
-    private static final String DEVICE_MASTERSHIP_TOPIC_PREFIX = "device-mastership:";
-
     private static final Pattern DEVICE_MASTERSHIP_TOPIC_PATTERN =
-            Pattern.compile("^" + DEVICE_MASTERSHIP_TOPIC_PREFIX + "(.*)");
+            Pattern.compile("device:(.*)");
 
     private ExecutorService eventHandler;
     private ExecutorService messageHandlingExecutor;
@@ -187,8 +188,8 @@ public class ConsistentDeviceMastershipStore
     @Override
     public RoleInfo getNodes(DeviceId deviceId) {
         checkArgument(deviceId != null, DEVICE_ID_NULL);
-        MastershipInfo mastership = getMastership(deviceId);
-        return new RoleInfo(mastership.master().orElse(null), mastership.backups());
+        Leadership leadership = leadershipService.getLeadership(createDeviceMastershipTopic(deviceId));
+        return new RoleInfo(leadership.leaderNodeId(), leadership.candidates());
     }
 
     @Override
@@ -365,7 +366,7 @@ public class ConsistentDeviceMastershipStore
     }
 
     private String createDeviceMastershipTopic(DeviceId deviceId) {
-        return String.format("%s%s", DEVICE_MASTERSHIP_TOPIC_PREFIX, deviceId.toString());
+        return String.format("device:%s", deviceId.toString());
     }
 
     private DeviceId extractDeviceIdFromTopic(String topic) {

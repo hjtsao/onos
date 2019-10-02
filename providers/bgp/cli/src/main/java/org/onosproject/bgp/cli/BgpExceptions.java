@@ -15,9 +15,8 @@
  */
 package org.onosproject.bgp.cli;
 
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
 import org.onosproject.bgp.controller.BgpController;
 import org.onosproject.cli.AbstractShellCommand;
 import org.slf4j.Logger;
@@ -27,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Service
+
 @Command(scope = "onos", name = "bgp-exception", description = "Displays Exceptions")
 public class BgpExceptions extends AbstractShellCommand {
     public static final String ACTIVESESSION = "activesession";
@@ -46,7 +45,7 @@ public class BgpExceptions extends AbstractShellCommand {
     private Set<String> closedSessionExceptionKeySet;
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         switch (name) {
             case ACTIVESESSION:
                 displayActiveSessionException();

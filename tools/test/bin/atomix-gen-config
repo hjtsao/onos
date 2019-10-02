@@ -135,20 +135,14 @@ if __name__ == '__main__':
           'type': 'raft',
           'partitions': 1,
           'partitionSize': len(nodes),
-          'members': [node['id'] for node in nodes],
-          'storage': {
-              'level': 'mapped'
-          }
+          'members': [node['id'] for node in nodes]
       },
       'partitionGroups': {
           'raft': {
               'type': 'raft',
               'partitions': num_partitions,
               'partitionSize': partition_size,
-              'members': [node['id'] for node in nodes],
-              'storage': {
-                  'level': 'mapped'
-              }
+              'members': [node['id'] for node in nodes]
           }
       }
   }

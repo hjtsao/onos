@@ -16,15 +16,17 @@
 
 package org.onosproject.store.pi.impl;
 
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.pi.runtime.PiTableEntry;
 import org.onosproject.net.pi.service.PiFlowRuleTranslationStore;
-import org.osgi.service.component.annotations.Component;
 
 /**
  * Distributed implementation of a PI translation store for flow rules.
  */
-@Component(immediate = true, service = PiFlowRuleTranslationStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedPiFlowRuleTranslationStore
         extends AbstractDistributedPiTranslationStore<FlowRule, PiTableEntry>
         implements PiFlowRuleTranslationStore {

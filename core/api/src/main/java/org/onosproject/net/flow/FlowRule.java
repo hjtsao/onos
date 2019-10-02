@@ -328,4 +328,13 @@ public interface FlowRule extends PiTranslatable {
         FlowRule build();
 
     }
+
+    /**
+     * Returns the third party original flow rule.
+     *
+     * @return FlowRuleExtPayLoad
+     * @deprecated in Junco release
+     */
+    @Deprecated
+    FlowRuleExtPayLoad payLoad();
 }

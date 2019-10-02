@@ -79,7 +79,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         }
     }
 
-    private static String buildRpcGetOpenFlowController() {
+    private String buildRpcGetOpenFlowController() {
         StringBuilder rpc = new StringBuilder(RPC_TAG_NETCONF_BASE);
 
         rpc.append("<get-configuration>");
@@ -102,7 +102,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         return rpc.toString();
     }
 
-    private static String buildRpcSetOpenFlowController(List<ControllerInfo> controllers) {
+    private String buildRpcSetOpenFlowController(List<ControllerInfo> controllers) {
         StringBuilder request = new StringBuilder();
 
         request.append("<protocols>");
@@ -115,15 +115,15 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         request.append("<ofagent-mode>");
 
         request.append("<controller>");
-        for (ControllerInfo controller : controllers) {
+        for (int i = 0; i < controllers.size(); i++) {
             request.append("<ip>");
             request.append("<name>");
-            request.append(controller.ip().toString());
+            request.append(controllers.get(i).ip().toString());
             request.append("</name>");
             request.append("<protocol>");
             request.append("<tcp>");
             request.append("<port>");
-            request.append(controller.port());
+            request.append(Integer.toString(controllers.get(i).port()));
             request.append("</port>");
             request.append("</tcp>");
             request.append("</protocol>");
@@ -138,7 +138,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         return cliSetRequestBuilder(request);
     }
 
-    private static String buildRpcRemoveOpenFlowController() {
+    private String buildRpcRemoveOpenFlowController() {
         StringBuilder request = new StringBuilder();
 
         request.append("<protocols>");
@@ -154,7 +154,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         return cliDeleteRequestBuilder(request);
     }
 
-    private static String buildCommit() {
+    private String buildCommit() {
         StringBuilder rpc = new StringBuilder(RPC_TAG_NETCONF_BASE);
 
         rpc.append("<commit/>");
@@ -164,7 +164,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         return rpc.toString();
     }
 
-    private static String buildDiscardChanges() {
+    private String buildDiscardChanges() {
         StringBuilder rpc = new StringBuilder(RPC_TAG_NETCONF_BASE);
 
         rpc.append("<discard-changes/>");
@@ -226,7 +226,7 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
             }
 
             reply = session.requestSync(buildCommit()).trim();
-            log.debug("reply : {}", reply);
+            log.debug(reply);
         } catch (NetconfException e) {
             log.debug(e.getMessage());
             return false;
@@ -235,7 +235,10 @@ public class ControllerConfigJuniperImpl extends AbstractHandlerBehaviour implem
         return true;
     }
 
-    private static boolean isOK(String reply) {
-        return reply != null && reply.contains("<ok/>");
+    private boolean isOK(String reply) {
+        if (reply != null && reply.indexOf("<ok/>") >= 0) {
+            return true;
+        }
+        return false;
     }
 }

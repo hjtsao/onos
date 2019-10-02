@@ -16,13 +16,12 @@
 
 package org.onosproject.pipelines.basic;
 
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.onlab.packet.DeserializationException;
 import org.onlab.packet.Ethernet;
 import org.onlab.util.ImmutableByteSequence;
 import org.onosproject.net.ConnectPoint;
-import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
@@ -33,19 +32,18 @@ import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.packet.DefaultInboundPacket;
 import org.onosproject.net.packet.InboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
-import org.onosproject.net.pi.model.PiActionId;
 import org.onosproject.net.pi.model.PiMatchFieldId;
 import org.onosproject.net.pi.model.PiPipelineInterpreter;
 import org.onosproject.net.pi.model.PiTableId;
+import org.onosproject.net.pi.model.PiActionId;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
-import org.onosproject.net.pi.runtime.PiPacketMetadata;
+import org.onosproject.net.pi.runtime.PiControlMetadata;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static java.lang.String.format;
@@ -56,22 +54,23 @@ import static org.onosproject.net.PortNumber.FLOOD;
 import static org.onosproject.net.flow.instructions.Instruction.Type.OUTPUT;
 import static org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import static org.onosproject.net.pi.model.PiPacketOperationType.PACKET_OUT;
-import static org.onosproject.pipelines.basic.BasicConstants.EGRESS_PORT;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_HDR_ETHERNET_DST_ADDR;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_HDR_ETHERNET_ETHER_TYPE;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_HDR_ETHERNET_SRC_ADDR;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_HDR_IPV4_DST_ADDR;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_HDR_IPV4_SRC_ADDR;
-import static org.onosproject.pipelines.basic.BasicConstants.HDR_STANDARD_METADATA_INGRESS_PORT;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_PORT;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_TABLE0_CONTROL_DROP;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_TABLE0_CONTROL_SEND_TO_CPU;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_TABLE0_CONTROL_SET_EGRESS_PORT;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_TABLE0_CONTROL_TABLE0;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_WCMP_CONTROL_SET_EGRESS_PORT;
-import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_WCMP_CONTROL_WCMP_TABLE;
-import static org.onosproject.pipelines.basic.BasicConstants.NO_ACTION;
-import static org.onosproject.pipelines.basic.BasicConstants.PORT;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_DROP_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_NOACTION_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_PRM_PORT_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_SEND_TO_CPU_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_SET_EGRESS_PORT_TABLE0_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.ACT_SET_EGRESS_PORT_WCMP_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_ETH_DST_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_ETH_SRC_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_ETH_TYPE_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_IN_PORT_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_IPV4_DST_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.HDR_IPV4_SRC_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.PKT_META_EGRESS_PORT_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.PKT_META_INGRESS_PORT_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.PORT_BITWIDTH;
+import static org.onosproject.pipelines.basic.BasicConstants.TBL_TABLE0_ID;
+import static org.onosproject.pipelines.basic.BasicConstants.TBL_WCMP_TABLE_ID;
 
 /**
  * Interpreter implementation for basic.p4.
@@ -79,28 +78,27 @@ import static org.onosproject.pipelines.basic.BasicConstants.PORT;
 public class BasicInterpreterImpl extends AbstractHandlerBehaviour
         implements PiPipelineInterpreter {
 
-    private static final int PORT_BITWIDTH = 9;
-
-    private static final Map<Integer, PiTableId> TABLE_MAP =
-            new ImmutableMap.Builder<Integer, PiTableId>()
-                    .put(0, BasicConstants.INGRESS_TABLE0_CONTROL_TABLE0)
+    private static final ImmutableBiMap<Integer, PiTableId> TABLE_MAP =
+            new ImmutableBiMap.Builder<Integer, PiTableId>()
+                    .put(0, TBL_TABLE0_ID)
                     .build();
-    private static final Map<Criterion.Type, PiMatchFieldId> CRITERION_MAP =
-            new ImmutableMap.Builder<Criterion.Type, PiMatchFieldId>()
-                    .put(Criterion.Type.IN_PORT, HDR_STANDARD_METADATA_INGRESS_PORT)
-                    .put(Criterion.Type.ETH_DST, HDR_HDR_ETHERNET_DST_ADDR)
-                    .put(Criterion.Type.ETH_SRC, HDR_HDR_ETHERNET_SRC_ADDR)
-                    .put(Criterion.Type.ETH_TYPE, HDR_HDR_ETHERNET_ETHER_TYPE)
-                    .put(Criterion.Type.IPV4_SRC, HDR_HDR_IPV4_SRC_ADDR)
-                    .put(Criterion.Type.IPV4_DST, HDR_HDR_IPV4_DST_ADDR)
+
+    private static final ImmutableBiMap<Criterion.Type, PiMatchFieldId> CRITERION_MAP =
+            new ImmutableBiMap.Builder<Criterion.Type, PiMatchFieldId>()
+                    .put(Criterion.Type.IN_PORT, HDR_IN_PORT_ID)
+                    .put(Criterion.Type.ETH_DST, HDR_ETH_DST_ID)
+                    .put(Criterion.Type.ETH_SRC, HDR_ETH_SRC_ID)
+                    .put(Criterion.Type.ETH_TYPE, HDR_ETH_TYPE_ID)
+                    .put(Criterion.Type.IPV4_SRC, HDR_IPV4_SRC_ID)
+                    .put(Criterion.Type.IPV4_DST, HDR_IPV4_DST_ID)
                     .build();
 
     @Override
     public PiAction mapTreatment(TrafficTreatment treatment, PiTableId piTableId)
             throws PiInterpreterException {
-        if (treatment.allInstructions().isEmpty()) {
+        if (treatment.allInstructions().size() == 0) {
             // No actions means drop.
-            return PiAction.builder().withId(INGRESS_TABLE0_CONTROL_DROP).build();
+            return PiAction.builder().withId(ACT_DROP_ID).build();
         } else if (treatment.allInstructions().size() > 1) {
             // We understand treatments with only 1 instruction.
             throw new PiInterpreterException("Treatment has multiple instructions");
@@ -109,16 +107,16 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
         Instruction instruction = treatment.allInstructions().get(0);
         switch (instruction.type()) {
             case OUTPUT:
-                if (piTableId.equals(INGRESS_TABLE0_CONTROL_TABLE0)) {
-                    return outputPiAction((OutputInstruction) instruction, INGRESS_TABLE0_CONTROL_SET_EGRESS_PORT);
-                } else if (piTableId.equals(INGRESS_WCMP_CONTROL_WCMP_TABLE)) {
-                    return outputPiAction((OutputInstruction) instruction, INGRESS_WCMP_CONTROL_SET_EGRESS_PORT);
+                if (piTableId == TBL_TABLE0_ID) {
+                    return outputPiAction((OutputInstruction) instruction, ACT_SET_EGRESS_PORT_TABLE0_ID);
+                } else if (piTableId == TBL_WCMP_TABLE_ID) {
+                    return outputPiAction((OutputInstruction) instruction, ACT_SET_EGRESS_PORT_WCMP_ID);
                 } else {
                     throw new PiInterpreterException(
                             "Output instruction not supported in table " + piTableId);
                 }
             case NOACTION:
-                return PiAction.builder().withId(NO_ACTION).build();
+                return PiAction.builder().withId(ACT_NOACTION_ID).build();
             default:
                 throw new PiInterpreterException(format(
                         "Instruction type '%s' not supported", instruction.type()));
@@ -129,12 +127,17 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
             throws PiInterpreterException {
         PortNumber port = outInstruction.port();
         if (!port.isLogical()) {
-            return PiAction.builder()
-                    .withId(piActionId)
-                    .withParameter(new PiActionParam(PORT, port.toLong()))
-                    .build();
+            try {
+                return PiAction.builder()
+                        .withId(piActionId)
+                        .withParameter(new PiActionParam(ACT_PRM_PORT_ID,
+                                                         copyFrom(port.toLong()).fit(PORT_BITWIDTH)))
+                        .build();
+            } catch (ImmutableByteSequence.ByteSequenceTrimException e) {
+                throw new PiInterpreterException(e.getMessage());
+            }
         } else if (port.equals(CONTROLLER)) {
-            return PiAction.builder().withId(INGRESS_TABLE0_CONTROL_SEND_TO_CPU).build();
+            return PiAction.builder().withId(ACT_SEND_TO_CPU_ID).build();
         } else {
             throw new PiInterpreterException(format(
                     "Egress on logical port '%s' not supported", port));
@@ -179,7 +182,7 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
     }
 
     @Override
-    public InboundPacket mapInboundPacket(PiPacketOperation packetIn, DeviceId deviceId)
+    public InboundPacket mapInboundPacket(PiPacketOperation packetIn)
             throws PiInterpreterException {
         // Assuming that the packet is ethernet, which is fine since basic.p4
         // can deparse only ethernet packets.
@@ -192,37 +195,38 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
         }
 
         // Returns the ingress port packet metadata.
-        Optional<PiPacketMetadata> packetMetadata = packetIn.metadatas()
-                .stream().filter(m -> m.id().equals(INGRESS_PORT))
+        Optional<PiControlMetadata> packetMetadata = packetIn.metadatas()
+                .stream().filter(m -> m.id().equals(PKT_META_INGRESS_PORT_ID))
                 .findFirst();
 
         if (packetMetadata.isPresent()) {
             ImmutableByteSequence portByteSequence = packetMetadata.get().value();
             short s = portByteSequence.asReadOnlyBuffer().getShort();
-            ConnectPoint receivedFrom = new ConnectPoint(deviceId, PortNumber.portNumber(s));
+            ConnectPoint receivedFrom = new ConnectPoint(packetIn.deviceId(), PortNumber.portNumber(s));
             ByteBuffer rawData = ByteBuffer.wrap(packetIn.data().asArray());
             return new DefaultInboundPacket(receivedFrom, ethPkt, rawData);
         } else {
             throw new PiInterpreterException(format(
                     "Missing metadata '%s' in packet-in received from '%s': %s",
-                    INGRESS_PORT, deviceId, packetIn));
+                    PKT_META_INGRESS_PORT_ID, packetIn.deviceId(), packetIn));
         }
     }
 
     private PiPacketOperation createPiPacketOperation(ByteBuffer data, long portNumber)
             throws PiInterpreterException {
-        PiPacketMetadata metadata = createPacketMetadata(portNumber);
+        PiControlMetadata metadata = createPacketMetadata(portNumber);
         return PiPacketOperation.builder()
+                .forDevice(this.data().deviceId())
                 .withType(PACKET_OUT)
                 .withData(copyFrom(data))
                 .withMetadatas(ImmutableList.of(metadata))
                 .build();
     }
 
-    private PiPacketMetadata createPacketMetadata(long portNumber) throws PiInterpreterException {
+    private PiControlMetadata createPacketMetadata(long portNumber) throws PiInterpreterException {
         try {
-            return PiPacketMetadata.builder()
-                    .withId(EGRESS_PORT)
+            return PiControlMetadata.builder()
+                    .withId(PKT_META_EGRESS_PORT_ID)
                     .withValue(copyFrom(portNumber).fit(PORT_BITWIDTH))
                     .build();
         } catch (ImmutableByteSequence.ByteSequenceTrimException e) {
@@ -237,7 +241,17 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
     }
 
     @Override
+    public Optional<Criterion.Type> mapPiMatchFieldId(PiMatchFieldId headerFieldId) {
+        return Optional.ofNullable(CRITERION_MAP.inverse().get(headerFieldId));
+    }
+
+    @Override
     public Optional<PiTableId> mapFlowRuleTableId(int flowRuleTableId) {
         return Optional.ofNullable(TABLE_MAP.get(flowRuleTableId));
+    }
+
+    @Override
+    public Optional<Integer> mapPiTableId(PiTableId piTableId) {
+        return Optional.ofNullable(TABLE_MAP.inverse().get(piTableId));
     }
 }

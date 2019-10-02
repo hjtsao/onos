@@ -23,9 +23,18 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.cfg.ComponentConfigService;
+import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.driver.DefaultDriverData;
 import org.onosproject.net.driver.DefaultDriverHandler;
@@ -36,13 +45,14 @@ import org.onosproject.net.flow.CompletedBatchOperation;
 import org.onosproject.net.flow.DefaultTableStatisticsEntry;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRule;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
+import org.onosproject.net.flow.FlowRuleExtPayLoad;
 import org.onosproject.net.flow.FlowRuleProvider;
 import org.onosproject.net.flow.FlowRuleProviderRegistry;
 import org.onosproject.net.flow.FlowRuleProviderService;
-import org.onosproject.net.flow.IndexTableId;
 import org.onosproject.net.flow.TableStatisticsEntry;
-import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
-import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
+import org.onosproject.net.flow.IndexTableId;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.net.statistic.DefaultLoad;
@@ -52,14 +62,9 @@ import org.onosproject.openflow.controller.OpenFlowEventListener;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.RoleState;
+import org.onosproject.openflow.controller.ThirdPartyMessage;
 import org.onosproject.provider.of.flow.util.FlowEntryBuilder;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
 import org.projectfloodlight.openflow.protocol.OFBarrierRequest;
 import org.projectfloodlight.openflow.protocol.OFCapabilities;
@@ -99,46 +104,42 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.onlab.util.Tools.get;
-import static org.onosproject.provider.of.flow.impl.OsgiPropertyConstants.ADAPTIVE_FLOW_SAMPLING;
-import static org.onosproject.provider.of.flow.impl.OsgiPropertyConstants.ADAPTIVE_FLOW_SAMPLING_DEFAULT;
-import static org.onosproject.provider.of.flow.impl.OsgiPropertyConstants.POLL_FREQUENCY;
-import static org.onosproject.provider.of.flow.impl.OsgiPropertyConstants.POLL_FREQUENCY_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider which uses an OpenFlow controller to detect network end-station
  * hosts.
  */
-@Component(immediate = true,
-        property = {
-                POLL_FREQUENCY + ":Integer=" + POLL_FREQUENCY_DEFAULT,
-                ADAPTIVE_FLOW_SAMPLING + ":Boolean=" + ADAPTIVE_FLOW_SAMPLING_DEFAULT,
-        })
+@Component(immediate = true)
 public class OpenFlowRuleProvider extends AbstractProvider
         implements FlowRuleProvider {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected FlowRuleProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected OpenFlowController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DriverService driverService;
 
+    private static final int DEFAULT_POLL_FREQUENCY = 5;
     private static final int MIN_EXPECTED_BYTE_LEN = 56;
     private static final int SKIP_BYTES = 4;
+    private static final boolean DEFAULT_ADAPTIVE_FLOW_SAMPLING = false;
 
-    /** Frequency (in seconds) for polling flow statistics. */
-    private int flowPollFrequency = POLL_FREQUENCY_DEFAULT;
+    @Property(name = "flowPollFrequency", intValue = DEFAULT_POLL_FREQUENCY,
+            label = "Frequency (in seconds) for polling flow statistics")
+    private int flowPollFrequency = DEFAULT_POLL_FREQUENCY;
 
-    /** Adaptive Flow Sampling is on or off. */
-    private boolean adaptiveFlowSampling = ADAPTIVE_FLOW_SAMPLING_DEFAULT;
+    @Property(name = "adaptiveFlowSampling", boolValue = DEFAULT_ADAPTIVE_FLOW_SAMPLING,
+            label = "Adaptive Flow Sampling is on or off")
+    private boolean adaptiveFlowSampling = DEFAULT_ADAPTIVE_FLOW_SAMPLING;
 
     private FlowRuleProviderService providerService;
 
@@ -195,7 +196,7 @@ public class OpenFlowRuleProvider extends AbstractProvider
         Dictionary<?, ?> properties = context.getProperties();
         int newFlowPollFrequency;
         try {
-            String s = get(properties, POLL_FREQUENCY);
+            String s = get(properties, "flowPollFrequency");
             newFlowPollFrequency = isNullOrEmpty(s) ? flowPollFrequency : Integer.parseInt(s.trim());
 
         } catch (NumberFormatException | ClassCastException e) {
@@ -210,7 +211,7 @@ public class OpenFlowRuleProvider extends AbstractProvider
         log.info("Settings: flowPollFrequency={}", flowPollFrequency);
 
         boolean newAdaptiveFlowSampling;
-        String s = get(properties, ADAPTIVE_FLOW_SAMPLING);
+        String s = get(properties, "adaptiveFlowSampling");
         newAdaptiveFlowSampling = isNullOrEmpty(s) ? adaptiveFlowSampling : Boolean.parseBoolean(s.trim());
 
         if (newAdaptiveFlowSampling != adaptiveFlowSampling) {
@@ -293,34 +294,6 @@ public class OpenFlowRuleProvider extends AbstractProvider
         tableStatsCollectors.values().forEach(tsc -> tsc.adjustPollInterval(flowPollFrequency));
     }
 
-    private void resetEvents(Dpid dpid) {
-        SwitchDataCollector collector;
-        if (adaptiveFlowSampling) {
-            collector = afsCollectors.get(dpid);
-        } else {
-            collector = simpleCollectors.get(dpid);
-        }
-        if (collector != null) {
-            collector.resetEvents();
-        }
-    }
-
-    private void recordEvent(Dpid dpid) {
-        recordEvents(dpid, 1);
-    }
-
-    private void recordEvents(Dpid dpid, int events) {
-        SwitchDataCollector collector;
-        if (adaptiveFlowSampling) {
-            collector = afsCollectors.get(dpid);
-        } else {
-            collector = simpleCollectors.get(dpid);
-        }
-        if (collector != null) {
-            collector.recordEvents(events);
-        }
-    }
-
     @Override
     public void applyFlowRule(FlowRule... flowRules) {
         for (FlowRule flowRule : flowRules) {
@@ -336,10 +309,14 @@ public class OpenFlowRuleProvider extends AbstractProvider
             return;
         }
 
+        FlowRuleExtPayLoad flowRuleExtPayLoad = flowRule.payLoad();
+        if (hasPayload(flowRuleExtPayLoad)) {
+            OFMessage msg = new ThirdPartyMessage(flowRuleExtPayLoad.payLoad());
+            sw.sendMsg(msg);
+            return;
+        }
         sw.sendMsg(FlowModBuilder.builder(flowRule, sw.factory(),
                 Optional.empty(), Optional.of(driverService)).buildFlowAdd());
-
-        recordEvent(dpid);
     }
 
     @Override
@@ -357,10 +334,20 @@ public class OpenFlowRuleProvider extends AbstractProvider
             return;
         }
 
+        FlowRuleExtPayLoad flowRuleExtPayLoad = flowRule.payLoad();
+        if (hasPayload(flowRuleExtPayLoad)) {
+            OFMessage msg = new ThirdPartyMessage(flowRuleExtPayLoad.payLoad());
+            sw.sendMsg(msg);
+            return;
+        }
         sw.sendMsg(FlowModBuilder.builder(flowRule, sw.factory(),
                                           Optional.empty(), Optional.of(driverService)).buildFlowDel());
+    }
 
-        recordEvent(dpid);
+    @Override
+    public void removeRulesById(ApplicationId id, FlowRule... flowRules) {
+        // TODO: optimize using the ApplicationId
+        removeFlowRule(flowRules);
     }
 
     @Override
@@ -380,6 +367,14 @@ public class OpenFlowRuleProvider extends AbstractProvider
         pendingBatches.put(batch.id(), new InternalCacheEntry(batch));
         OFFlowMod mod;
         for (FlowRuleBatchEntry fbe : batch.getOperations()) {
+            // flow is the third party privacy flow
+
+            FlowRuleExtPayLoad flowRuleExtPayLoad = fbe.target().payLoad();
+            if (hasPayload(flowRuleExtPayLoad)) {
+                OFMessage msg = new ThirdPartyMessage(flowRuleExtPayLoad.payLoad());
+                sw.sendMsg(msg);
+                continue;
+            }
             FlowModBuilder builder =
                     FlowModBuilder.builder(fbe.target(), sw.factory(),
                             Optional.of(batch.id()), Optional.of(driverService));
@@ -403,8 +398,12 @@ public class OpenFlowRuleProvider extends AbstractProvider
         OFBarrierRequest.Builder builder = sw.factory().buildBarrierRequest()
                 .setXid(batch.id());
         sw.sendMsg(builder.build());
+    }
 
-        recordEvents(dpid, batch.getOperations().size());
+    private boolean hasPayload(FlowRuleExtPayLoad flowRuleExtPayLoad) {
+        return flowRuleExtPayLoad != null &&
+                flowRuleExtPayLoad.payLoad() != null &&
+                flowRuleExtPayLoad.payLoad().length > 0;
     }
 
     private class InternalFlowProvider
@@ -450,16 +449,6 @@ public class OpenFlowRuleProvider extends AbstractProvider
                     break;
                 case STATS_REPLY:
                     if (((OFStatsReply) msg).getStatsType() == OFStatsType.FLOW) {
-                        // Let's unblock first the collector
-                        SwitchDataCollector collector;
-                        if (adaptiveFlowSampling) {
-                            collector = afsCollectors.get(dpid);
-                        } else {
-                            collector = simpleCollectors.get(dpid);
-                        }
-                        if (collector != null) {
-                            collector.received();
-                        }
                         pushFlowMetrics(dpid, (OFFlowStatsReply) msg, getDriver(deviceId));
                     } else if (((OFStatsReply) msg).getStatsType() == OFStatsType.TABLE) {
                         pushTableStatistics(dpid, (OFTableStatsReply) msg);
@@ -628,9 +617,7 @@ public class OpenFlowRuleProvider extends AbstractProvider
         @Override
         public void receivedRoleReply(Dpid dpid, RoleState requested,
                                       RoleState response) {
-            if (response == RoleState.MASTER) {
-                resetEvents(dpid);
-            }
+            // Do nothing here for now.
         }
 
         private DriverHandler getDriver(DeviceId devId) {

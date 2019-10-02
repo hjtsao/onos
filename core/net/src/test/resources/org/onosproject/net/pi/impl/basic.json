@@ -1,4 +1,3 @@
 {
-    "driver": "baseDriver",
-    "pipeconf": "org.onosproject.pipelines.basic"
+    "driver": "baseDriver"
 }

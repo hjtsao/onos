@@ -135,7 +135,6 @@ public class LldpLinkProviderTest {
         replay(coreService);
 
         provider.cfgService = new ComponentConfigAdapter();
-        provider.enabled = false;
         provider.coreService = coreService;
         provider.cfgRegistry = configRegistry;
 

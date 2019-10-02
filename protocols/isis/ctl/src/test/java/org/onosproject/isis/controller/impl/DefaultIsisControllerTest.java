@@ -87,7 +87,7 @@ public class DefaultIsisControllerTest {
     /**
      * Tests deactivate() method.
      */
-    @Test()
+    @Test(expected = Exception.class)
     public void testDeactivate() throws Exception {
         defaultIsisController.activate();
         defaultIsisController.deactivate();

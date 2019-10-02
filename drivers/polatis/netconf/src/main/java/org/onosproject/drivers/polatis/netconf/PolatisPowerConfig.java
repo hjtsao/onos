@@ -58,7 +58,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Set target port power or channel attenuation to an optical netconf device.
  */
 public class PolatisPowerConfig<T> extends AbstractHandlerBehaviour
-        implements PowerConfig<T> {
+    implements PowerConfig<T> {
 
     private static final String KEY_POWER = "power";
     private static final String KEY_ATTEN_LEVEL = "atten-level";
@@ -68,48 +68,32 @@ public class PolatisPowerConfig<T> extends AbstractHandlerBehaviour
     private static final Logger log = getLogger(PolatisPowerConfig.class);
 
     @Override
-    public Optional<Double> getTargetPower(PortNumber port, T component) {
-        Long power = acquireCurrentPower(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(power.doubleValue());
+    public Optional<Long> getTargetPower(PortNumber port, T component) {
+        return Optional.ofNullable(acquireTargetPower(port, component));
     }
 
     @Override
-    public void setTargetPower(PortNumber port, T component, double power) {
+    public void setTargetPower(PortNumber port, T component, long power) {
         if (component instanceof OchSignal) {
             log.warn("Channel power is not applicable.");
             return;
         }
-        setPortTargetPower(port, (long) power);
+        setPortTargetPower(port, power);
     }
 
     @Override
-    public Optional<Double> currentPower(PortNumber port, T component) {
-        Long power = acquireCurrentPower(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(power.doubleValue());
+    public Optional<Long> currentPower(PortNumber port, T component) {
+        return Optional.ofNullable(acquireCurrentPower(port, component));
     }
 
     @Override
-    public Optional<Range<Double>> getTargetPowerRange(PortNumber port, T component) {
-        Range<Long> power = getTxPowerRange(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Range.closed((double) power.lowerEndpoint(), (double) power.upperEndpoint()));
+    public Optional<Range<Long>> getTargetPowerRange(PortNumber port, T component) {
+        return Optional.ofNullable(getTxPowerRange(port, component));
     }
 
     @Override
-    public Optional<Range<Double>> getInputPowerRange(PortNumber port, T component) {
-        Range<Long> power = getRxPowerRange(port, component);
-        if (power == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Range.closed((double) power.lowerEndpoint(), (double) power.upperEndpoint()));
+    public Optional<Range<Long>> getInputPowerRange(PortNumber port, T component) {
+        return Optional.ofNullable(getRxPowerRange(port, component));
     }
 
     @Override

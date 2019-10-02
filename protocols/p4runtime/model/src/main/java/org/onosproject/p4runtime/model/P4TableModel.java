@@ -49,6 +49,7 @@ final class P4TableModel implements PiTableModel {
     private final ImmutableMap<PiMatchFieldId, PiMatchFieldModel> matchFields;
     private final ImmutableMap<PiActionId, PiActionModel> actions;
     private final PiActionModel constDefaultAction;
+    private final boolean hasDefaultMutableParams;
     private final boolean isConstTable;
 
     P4TableModel(PiTableId id, PiTableType tableType,
@@ -57,7 +58,7 @@ final class P4TableModel implements PiTableModel {
                  ImmutableMap<PiMeterId, PiMeterModel> meters, boolean supportAging,
                  ImmutableMap<PiMatchFieldId, PiMatchFieldModel> matchFields,
                  ImmutableMap<PiActionId, PiActionModel> actions,
-                 PiActionModel constDefaultAction,
+                 PiActionModel constDefaultAction, boolean hasDefaultMutableParams,
                  boolean isConstTable) {
         this.id = id;
         this.tableType = tableType;
@@ -69,6 +70,7 @@ final class P4TableModel implements PiTableModel {
         this.matchFields = matchFields;
         this.actions = actions;
         this.constDefaultAction = constDefaultAction;
+        this.hasDefaultMutableParams = hasDefaultMutableParams;
         this.isConstTable = isConstTable;
     }
 
@@ -123,6 +125,11 @@ final class P4TableModel implements PiTableModel {
     }
 
     @Override
+    public boolean hasDefaultMutableParams() {
+        return hasDefaultMutableParams;
+    }
+
+    @Override
     public boolean isConstantTable() {
         return isConstTable;
     }
@@ -141,7 +148,7 @@ final class P4TableModel implements PiTableModel {
     public int hashCode() {
         return Objects.hash(id, tableType, actionProfile, maxSize, counters,
                             meters, supportAging, matchFields, actions,
-                            constDefaultAction);
+                            constDefaultAction, hasDefaultMutableParams);
     }
 
     @Override
@@ -162,6 +169,7 @@ final class P4TableModel implements PiTableModel {
                 && Objects.equals(this.supportAging, other.supportAging)
                 && Objects.equals(this.matchFields, other.matchFields)
                 && Objects.equals(this.actions, other.actions)
-                && Objects.equals(this.constDefaultAction, other.constDefaultAction);
+                && Objects.equals(this.constDefaultAction, other.constDefaultAction)
+                && Objects.equals(this.hasDefaultMutableParams, other.hasDefaultMutableParams);
     }
 }

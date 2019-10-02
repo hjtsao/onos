@@ -16,7 +16,6 @@
 package org.onosproject.provider.nil.cli;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractChoicesCompleter;
 
 import java.util.List;
@@ -24,7 +23,6 @@ import java.util.List;
 /**
  * Topology shape completer.
  */
-@Service
 public class TopologyShapeCompleter extends AbstractChoicesCompleter {
     @Override
     public List<String> choices() {

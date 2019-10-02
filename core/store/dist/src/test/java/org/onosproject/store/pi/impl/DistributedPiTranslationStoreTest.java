@@ -43,8 +43,9 @@ public class DistributedPiTranslationStoreTest {
     private static final PiTranslatable PI_TRANSLATABLE =
             new PiTranslatable() {
             };
-    private static final PiHandle PI_HANDLE =
-            new PiHandle(DeviceId.NONE) {
+    private static final PiEntity PI_ENTITY = () -> PiEntityType.TABLE_ENTRY;
+    private static final PiHandle<PiEntity> PI_HANDLE =
+            new PiHandle<PiEntity>(DeviceId.NONE) {
                 @Override
                 public PiEntityType entityType() {
                     return PI_ENTITY.piEntityType();
@@ -65,17 +66,6 @@ public class DistributedPiTranslationStoreTest {
                     return String.valueOf(HANDLE_HASH);
                 }
             };
-    private static final PiEntity PI_ENTITY = new PiEntity() {
-        @Override
-        public PiEntityType piEntityType() {
-            return PiEntityType.TABLE_ENTRY;
-        }
-
-        @Override
-        public PiHandle handle(DeviceId deviceId) {
-            return PI_HANDLE;
-        }
-    };
     private static final PiTranslatedEntity<PiTranslatable, PiEntity> TRANSLATED_ENTITY =
             new PiTranslatedEntity<>(PI_TRANSLATABLE, PI_ENTITY, PI_HANDLE);
 

@@ -15,12 +15,9 @@
  */
 package org.onosproject.drivers.fujitsu.cli;
 
-import org.apache.karaf.shell.api.action.Argument;
-import org.apache.karaf.shell.api.action.Command;
-import org.apache.karaf.shell.api.action.Completion;
-import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.commands.Argument;
+import org.apache.karaf.shell.commands.Command;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.cli.net.DeviceIdCompleter;
 import org.onosproject.net.DeviceId;
 import org.onosproject.drivers.fujitsu.behaviour.VoltAlertConfig;
 import org.onosproject.net.driver.DriverHandler;
@@ -29,14 +26,12 @@ import org.onosproject.net.driver.DriverService;
 /**
  * Subscribes to receive notifications of vOLT or unsubscribes.
  */
-@Service
 @Command(scope = "onos", name = "volt-notification-subscribe",
         description = "Subscribes to receive notifications of vOLT")
 public class VoltSubscribeCommand extends AbstractShellCommand {
 
     @Argument(index = 0, name = "uri", description = "Device ID",
             required = true, multiValued = false)
-    @Completion(DeviceIdCompleter.class)
     String uri = null;
 
     @Argument(index = 1, name = "mode", description = "Disable subscription",
@@ -46,7 +41,7 @@ public class VoltSubscribeCommand extends AbstractShellCommand {
     private DeviceId deviceId;
 
     @Override
-    protected void doExecute() {
+    protected void execute() {
         DriverService service = get(DriverService.class);
         deviceId = DeviceId.deviceId(uri);
         DriverHandler h = service.createHandler(deviceId);

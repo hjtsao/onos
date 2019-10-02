@@ -20,9 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.drivers.microsemi.yang.MseaUniEvcServiceNetconfService;
 import org.onosproject.netconf.DatastoreId;
 import org.onosproject.netconf.NetconfException;
@@ -46,7 +47,8 @@ import org.onosproject.yang.runtime.DefaultCompositeStream;
 /**
  * Implementation of the MseaUniEvcServiceService YANG model service.
  */
-@Component(immediate = true, service = MseaUniEvcServiceNetconfService.class)
+@Component(immediate = true, inherit = true)
+@Service
 public class MseaUniEvcServiceManager extends AbstractYangServiceImpl
         implements MseaUniEvcServiceNetconfService {
     public static final String MSEA_UNI_EVC_SVC =

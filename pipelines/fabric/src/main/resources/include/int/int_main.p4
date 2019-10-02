@@ -45,13 +45,11 @@ control process_set_source_sink (
 
     table tb_set_source {
         key = {
-            standard_metadata.ingress_port: exact @name("ig_port");
+            standard_metadata.ingress_port: exact;
         }
         actions = {
             int_set_source;
-            @defaultonly nop();
         }
-        const default_action = nop();
         counters = counter_set_source;
         size = MAX_PORTS;
     }
@@ -66,13 +64,11 @@ control process_set_source_sink (
 
     table tb_set_sink {
         key = {
-            standard_metadata.egress_spec: exact @name("eg_spec");
+            standard_metadata.egress_spec: exact;
         }
         actions = {
             int_set_sink;
-            @defaultonly nop();
         }
-        const default_action = nop();
         counters = counter_set_sink;
         size = MAX_PORTS;
     }

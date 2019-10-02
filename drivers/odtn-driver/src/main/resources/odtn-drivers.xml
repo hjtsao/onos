@@ -15,16 +15,6 @@
   ~ limitations under the License.
   -->
 <drivers>
-    <driver name="ols" manufacturer="tapi-swagger" hwVersion="0" swVersion="2.1">
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.tapi.TapiDeviceDescriptionDiscovery"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.tapi.TapiDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.tapi.TapiFlowRuleProgrammable"/>
-    </driver>
     <driver name="odtn" manufacturer="" hwVersion="" swVersion="">
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                   impl="org.onosproject.drivers.odtn.OpenConfigDeviceDiscovery"/>
@@ -33,29 +23,10 @@
         <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
                   impl="org.onosproject.odtn.behaviour.PlainTransceiver"/>
     </driver>
-
-    <driver name="terminal-device"  manufacturer="CTTC" hwVersion="" swVersion="">
+    <driver name="terminal-device" manufacturer="CTTC" hwVersion="" swVersion="">
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceDiscovery"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceFlowRuleProgrammable"/>
     </driver>
-
-    <driver name="openroadm" extends="" manufacturer="CTTC/CNIT" hwVersion="0.0.1" swVersion="0.0.1">
-        <behaviour api ="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.openroadm.OpenRoadmDeviceDescription"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.openroadm.OpenRoadmFlowRuleProgrammable"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openroadm.OpenRoadmLambdaQuery"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-   </driver>
-
     <driver name="infinera-xt3300" manufacturer="infinera" hwVersion="xt3300" swVersion="18.0">
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                    impl="org.onosproject.drivers.odtn.InfineraOpenConfigDeviceDiscovery"/>
@@ -64,76 +35,6 @@
         <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
                    impl="org.onosproject.odtn.behaviour.InfineraTransceiver"/>
     </driver>
-    <driver name="cassini-ocnos" manufacturer="Edgecore" hwVersion="cassini" swVersion="OcNOS">
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscovery"/>
-        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscovery"/>
-        <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
-                   impl="org.onosproject.odtn.behaviour.CassiniTransceiver"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.CassiniFlowRuleProgrammable"/>
-        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDevicePowerConfig"/>
-        <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniModulationOpenConfig"/>
-    </driver>
-    <driver name="cassini-ocnos-old" manufacturer="Edgecore" hwVersion="cassini" swVersion="OcNOS">
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscoveryOld"/>
-        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscoveryOld"/>
-        <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
-                   impl="org.onosproject.odtn.behaviour.CassiniTransceiver"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.CassiniFlowRuleProgrammable"/>
-        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDevicePowerConfig"/>
-    </driver>
-    <driver name="cassini-ocnos-ipi-model" manufacturer="Edgecore" hwVersion="cassini" swVersion="OcNOS">
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscovery"/>
-        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscovery"/>
-        <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
-                   impl="org.onosproject.odtn.behaviour.CassiniTransceiver"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.CassiniFlowRuleProgrammable"/>
-        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDevicePowerConfig"/>
-        <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniModulationOcNos"/>
-    </driver>
-    <driver name="cassini-openconfig" manufacturer="Edgecore" hwVersion="cassini" swVersion="OcNOS">
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscoveryOld"/>
-        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDeviceDiscoveryOld"/>
-        <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
-                   impl="org.onosproject.odtn.behaviour.CassiniTransceiver"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.CassiniFlowRuleProgrammable"/>
-        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniTerminalDevicePowerConfigExt"/>
-        <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniModulationConfig"/>
-    </driver>
     <driver name="nokia-1830" manufacturer="nokia" hwVersion="1830" swVersion="R10.1.1">
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                    impl="org.onosproject.drivers.odtn.NokiaOpenConfigDeviceDiscovery"/>
@@ -141,12 +42,6 @@
                    impl="org.onosproject.drivers.odtn.NokiaOpenConfigDeviceDiscovery"/>
         <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
                    impl="org.onosproject.odtn.behaviour.PlainTransceiver"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.drivers.odtn.NokiaFlowRuleProgrammable"/>
-        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
-                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
         <property name="netconfClientCapability">urn:ietf:params:netconf:base:1.0|
             urn:ietf:params:netconf:capability:writable-running:1.0|
             urn:ietf:params:netconf:capability:notification:1.0|

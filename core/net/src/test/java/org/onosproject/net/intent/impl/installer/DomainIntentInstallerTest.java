@@ -74,7 +74,7 @@ public class DomainIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = IntentData.compiled(toInstall, intentsToInstall);
+        toInstall = new IntentData(toInstall, intentsToInstall);
         IntentOperationContext<DomainIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
         operationContext = new IntentOperationContext(intentsToUninstall, intentsToInstall, context);
@@ -93,7 +93,7 @@ public class DomainIntentInstallerTest extends AbstractIntentInstallerTest {
                                                 IntentState.WITHDRAWING,
                                                 new WallClockTimestamp());
         IntentData toInstall = null;
-        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
+        toUninstall = new IntentData(toUninstall, intentsToUninstall);
         IntentOperationContext<DomainIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
         operationContext = new IntentOperationContext(intentsToUninstall, intentsToInstall, context);
@@ -111,11 +111,11 @@ public class DomainIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
+        toUninstall = new IntentData(toUninstall, intentsToUninstall);
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = IntentData.compiled(toInstall, intentsToInstall);
+        toInstall = new IntentData(toInstall, intentsToInstall);
         IntentOperationContext<DomainIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
         operationContext = new IntentOperationContext(intentsToUninstall, intentsToInstall, context);
@@ -151,7 +151,7 @@ public class DomainIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = IntentData.compiled(toInstall, intentsToInstall);
+        toInstall = new IntentData(toInstall, intentsToInstall);
         IntentOperationContext<DomainIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
         operationContext = new IntentOperationContext(intentsToUninstall, intentsToInstall, context);

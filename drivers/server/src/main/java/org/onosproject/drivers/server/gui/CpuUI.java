@@ -16,28 +16,32 @@
 
 package org.onosproject.drivers.server.gui;
 
-import com.google.common.collect.ImmutableList;
 import org.onosproject.ui.UiExtension;
 import org.onosproject.ui.UiExtensionService;
 import org.onosproject.ui.UiMessageHandlerFactory;
 import org.onosproject.ui.UiView;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
+
+import com.google.common.collect.ImmutableList;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-import static org.onosproject.ui.GlyphConstants.ENDSTATION;
 import static org.onosproject.ui.UiView.Category.NETWORK;
+import static org.onosproject.ui.GlyphConstants.ENDSTATION;
 
 /**
  * Mechanism to stream CPU data to the GUI.
  */
-@Component(immediate = true, service = CpuUI.class)
+@Component(immediate = true, enabled = true)
+@Service(value = CpuUI.class)
 public class CpuUI {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -69,7 +73,7 @@ public class CpuUI {
     /**
      * Interact with ONOS.
      */
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected UiExtensionService uiExtensionService;
 
     @Activate

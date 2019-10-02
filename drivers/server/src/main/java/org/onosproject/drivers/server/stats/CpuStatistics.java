@@ -54,14 +54,6 @@ public interface CpuStatistics {
     boolean busy();
 
     /**
-     * Returns the amount of time in ms since the CPU has been busy,
-     * or a negative value if the CPU is idle.
-     *
-     * @return int time in ms since the CPU has been busy
-     */
-    int busySince();
-
-    /**
      * Returns the unit of throughput values.
      *
      * @return throughput monitoring unit

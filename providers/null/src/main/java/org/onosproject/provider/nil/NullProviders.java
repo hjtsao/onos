@@ -15,6 +15,14 @@
  */
 package org.onosproject.provider.nil;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.osgi.DefaultServiceDirectory;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
@@ -46,12 +54,6 @@ import org.onosproject.net.packet.PacketProviderService;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Dictionary;
@@ -64,23 +66,14 @@ import static org.onlab.util.Tools.get;
 import static org.onosproject.net.DeviceId.deviceId;
 import static org.onosproject.net.MastershipRole.MASTER;
 import static org.onosproject.net.MastershipRole.NONE;
-import static org.onosproject.provider.nil.OsgiPropertyConstants.*;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider of a fake network environment, i.e. devices, links, hosts, etc.
  * To be used for benchmarking only.
  */
-@Component(immediate = true, service = NullProviders.class,
-        property = {
-            ENABLED + ":Boolean=" + ENABLED_DEFAULT,
-            TOPO_SHAPE + "=" + TOPO_SHAPE_DEFAULT,
-            DEVICE_COUNT + ":Integer=" + DEVICE_COUNT_DEFAULT,
-            HOST_COUNT + ":Integer=" +  HOST_COUNT_DEFAULT,
-            PACKET_RATE + ":Integer=" +  PACKET_RATE_DEFAULT,
-            MUTATION_RATE + ":Double=" + MUTATION_RATE_DEFAULT,
-            MASTERSHIP + "=" + MASTERSHIP_DEFAULT,
-        })
+@Component(immediate = true)
+@Service(value = NullProviders.class)
 public class NullProviders {
 
     private static final Logger log = getLogger(NullProviders.class);
@@ -92,40 +85,42 @@ public class NullProviders {
             "Settings: enabled={}, topoShape={}, deviceCount={}, " +
                     "hostCount={}, packetRate={}, mutationRate={}";
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipAdminService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceAdminService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected HostService hostService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LinkService linkService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceProviderRegistry deviceProviderRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected HostProviderRegistry hostProviderRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LinkProviderRegistry linkProviderRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected FlowRuleProviderRegistry flowRuleProviderRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected GroupProviderRegistry groupProviderRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PacketProviderRegistry packetProviderRegistry;
 
     private final NullDeviceProvider deviceProvider = new NullDeviceProvider();
@@ -145,26 +140,39 @@ public class NullProviders {
 
     private TopologySimulator simulator;
 
-    /** Enables or disables the provider. */
+    @Property(name = "enabled", boolValue = false,
+            label = "Enables or disables the provider")
     private boolean enabled = false;
 
-    /** Topology shape: configured, linear, reroute, tree, spineleaf, mesh, grid. */
-    private String topoShape = TOPO_SHAPE_DEFAULT;
+    private static final String DEFAULT_TOPO_SHAPE = "configured";
+    @Property(name = "topoShape", value = DEFAULT_TOPO_SHAPE,
+            label = "Topology shape: configured, linear, reroute, tree, spineleaf, mesh, grid")
+    private String topoShape = DEFAULT_TOPO_SHAPE;
 
-    /** Number of devices to generate. */
-    private int deviceCount = DEVICE_COUNT_DEFAULT;
+    private static final int DEFAULT_DEVICE_COUNT = 10;
+    @Property(name = "deviceCount", intValue = DEFAULT_DEVICE_COUNT,
+            label = "Number of devices to generate")
+    private int deviceCount = DEFAULT_DEVICE_COUNT;
 
-    /** Number of host to generate per device. */
-    private int hostCount = HOST_COUNT_DEFAULT;
+    private static final int DEFAULT_HOST_COUNT = 5;
+    @Property(name = "hostCount", intValue = DEFAULT_HOST_COUNT,
+            label = "Number of host to generate per device")
+    private int hostCount = DEFAULT_HOST_COUNT;
 
-    /** Packet-in/s rate; 0 for no packets. */
-    private int packetRate = PACKET_RATE_DEFAULT;
+    private static final int DEFAULT_PACKET_RATE = 0;
+    @Property(name = "packetRate", intValue = DEFAULT_PACKET_RATE,
+            label = "Packet-in/s rate; 0 for no packets")
+    private int packetRate = DEFAULT_PACKET_RATE;
 
-    /** Link event/s topology mutation rate; 0 for no mutations. */
-    private double mutationRate = MUTATION_RATE_DEFAULT;
+    private static final double DEFAULT_MUTATION_RATE = 0;
+    @Property(name = "mutationRate", doubleValue = DEFAULT_MUTATION_RATE,
+            label = "Link event/s topology mutation rate; 0 for no mutations")
+    private double mutationRate = DEFAULT_MUTATION_RATE;
 
-    /** Mastership given as 'random' or 'node1=dpid,dpid/node2=dpid,...'. */
-    private String mastership = MASTERSHIP_DEFAULT;
+    private static final String DEFAULT_MASTERSHIP = "random";
+    @Property(name = "mastership", value = DEFAULT_MASTERSHIP,
+            label = "Mastership given as 'random' or 'node1=dpid,dpid/node2=dpid,...'")
+    private String mastership = DEFAULT_MASTERSHIP;
 
 
     @Activate
@@ -211,22 +219,22 @@ public class NullProviders {
         double newMutationRate;
         String newTopoShape, newMastership;
         try {
-            String s = get(properties, ENABLED);
+            String s = get(properties, "enabled");
             newEnabled = isNullOrEmpty(s) ? enabled : Boolean.parseBoolean(s.trim());
 
-            newTopoShape = get(properties, TOPO_SHAPE);
-            newMastership = get(properties, MASTERSHIP);
+            newTopoShape = get(properties, "topoShape");
+            newMastership = get(properties, "mastership");
 
-            s = get(properties, DEVICE_COUNT);
+            s = get(properties, "deviceCount");
             newDeviceCount = isNullOrEmpty(s) ? deviceCount : Integer.parseInt(s.trim());
 
-            s = get(properties, HOST_COUNT);
+            s = get(properties, "hostCount");
             newHostCount = isNullOrEmpty(s) ? hostCount : Integer.parseInt(s.trim());
 
-            s = get(properties, PACKET_RATE);
+            s = get(properties, "packetRate");
             newPacketRate = isNullOrEmpty(s) ? packetRate : Integer.parseInt(s.trim());
 
-            s = get(properties, MUTATION_RATE);
+            s = get(properties, "mutationRate");
             newMutationRate = isNullOrEmpty(s) ? mutationRate : Double.parseDouble(s.trim());
 
         } catch (NumberFormatException e) {
@@ -402,7 +410,7 @@ public class NullProviders {
 
     // Re-assigns mastership roles.
     private void reassignMastership() {
-        if (mastership.equals(MASTERSHIP_DEFAULT)) {
+        if (mastership.equals(DEFAULT_MASTERSHIP)) {
             mastershipService.balanceRoles();
         } else {
             NodeId localNode = clusterService.getLocalNode().id();

@@ -18,6 +18,12 @@ package org.onosproject.store.region.impl;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.Identifier;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.net.Annotations;
@@ -35,11 +41,6 @@ import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Arrays;
@@ -59,7 +60,8 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Consistent store implementation for tracking region definitions and device
  * region affiliation.
  */
-@Component(immediate = true, service = RegionStore.class)
+@Component(immediate = true)
+@Service
 public class DistributedRegionStore
         extends AbstractStore<RegionEvent, RegionStoreDelegate>
         implements RegionStore {
@@ -69,7 +71,7 @@ public class DistributedRegionStore
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
     private ConsistentMap<RegionId, Region> regionsRepo;

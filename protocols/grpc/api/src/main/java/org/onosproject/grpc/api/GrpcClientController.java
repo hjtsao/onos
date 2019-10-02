@@ -17,72 +17,62 @@
 package org.onosproject.grpc.api;
 
 import com.google.common.annotations.Beta;
-import io.grpc.ManagedChannel;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.device.DeviceAgentListener;
-import org.onosproject.net.provider.ProviderId;
 
 /**
- * Abstraction of controller that manages gRPC clients.
+ * Abstraction of a gRPC controller which controls specific gRPC
+ * client {@link C} with specific client key {@link K}.
  *
+ * @param <K> the gRPC client key
  * @param <C> the gRPC client type
  */
 @Beta
-public interface GrpcClientController<C extends GrpcClient> {
+public interface GrpcClientController<K extends GrpcClientKey, C extends GrpcClient> {
 
     /**
-     * Instantiates a new client to operate on the given gRPC channel. Returns
-     * true if  the client was created successfully, false otherwise. Clients
-     * are identified by device IDs and once created they can be obtained by
-     * invoking {@link #get(DeviceId)}.
-     * <p>
-     * Only one client can exist for the same device ID. If a client for the
-     * given device ID already exists, throws an exception.
+     * Instantiates a new client to operate on a gRPC server identified by
+     * the given information. As a result of this method, a client can be later
+     * obtained by invoking {@link #getClient(DeviceId)}.
      *
-     * @param deviceId device ID
-     * @param channel  gRPC managed channel
-     * @return true if the client was created, false otherwise
-     * @throws IllegalArgumentException if a client for the same device ID
-     *                                  already exists.
+     * Only one client can exist for the same device ID. Calls to this method are
+     * idempotent fot the same client key, i.e. returns true
+     * if such client already exists but a new one is not created.
+     * If there exists a client with same device ID but different address and port,
+     * removes old one and recreate new one.
+     *
+     * @param clientKey the client key
+     * @return true if the client was created and the channel to the server is open;
+     *         false otherwise
      */
-    boolean create(DeviceId deviceId, ManagedChannel channel);
+    boolean createClient(K clientKey);
 
     /**
-     * Returns the gRPC client previously created for the given device ID, or
-     * null if such client does not exist.
+     * Retrieves the gRPC client to operate on the given device.
      *
-     * @param deviceId the device ID
+     * @param deviceId the device identifier
      * @return the gRPC client of the device if exists; null otherwise
      */
-    C get(DeviceId deviceId);
+    C getClient(DeviceId deviceId);
 
     /**
-     * Removes the gRPC client for the given device and any gRPC channel state
-     * associated to it. If no client exists for the given device, the result is
-     * a no-op.
+     * Removes the gRPC client for the given device. If no client
+     * exists for the given device, the result is a no-op.
      *
-     * @param deviceId the device ID
+     * @param deviceId the device identifier
      */
-    void remove(DeviceId deviceId);
+    void removeClient(DeviceId deviceId);
 
     /**
-     * Adds a listener for device agent events for the given provider. If a
-     * listener already exists for the given device ID and provider ID, then it
-     * will be replaced by the new one.
+     * Check reachability of the gRPC server running on the given device.
+     * Reachability can be tested only if a client is previously created
+     * using {@link #createClient(GrpcClientKey)}.
+     * Note that this only checks the reachability instead of checking service
+     * availability, different gRPC client checks service availability with
+     * different way.
      *
-     * @param deviceId   device ID
-     * @param providerId provider ID
-     * @param listener   the device agent listener
+     * @param deviceId the device identifier
+     * @return true if client was created and is able to contact the gNMI server;
+     *         false otherwise
      */
-    void addDeviceAgentListener(DeviceId deviceId, ProviderId providerId,
-                                DeviceAgentListener listener);
-
-    /**
-     * Removes the listener for device agent events that was previously
-     * registered for the given provider.
-     *
-     * @param deviceId   device ID
-     * @param providerId the provider ID
-     */
-    void removeDeviceAgentListener(DeviceId deviceId, ProviderId providerId);
+    boolean isReachable(DeviceId deviceId);
 }

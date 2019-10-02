@@ -40,18 +40,16 @@ control spgw_normalizer(
 }
 
 control spgw_ingress(
-        inout ipv4_t              gtpu_ipv4,
-        inout udp_t               gtpu_udp,
-        inout gtpu_t              gtpu,
-        inout ipv4_t              ipv4,
-        inout udp_t               udp,
-        inout fabric_metadata_t   fabric_meta,
-        inout standard_metadata_t standard_metadata
+        inout ipv4_t      gtpu_ipv4,
+        inout udp_t       gtpu_udp,
+        inout gtpu_t      gtpu,
+        inout ipv4_t      ipv4,
+        inout udp_t       udp,
+        inout spgw_meta_t spgw_meta
     ) {
 
     direct_counter(CounterType.packets_and_bytes) ue_counter;
 
-    @hidden
     action gtpu_decap() {
         gtpu_ipv4.setInvalid();
         gtpu_udp.setInvalid();
@@ -61,57 +59,54 @@ control spgw_ingress(
     action set_dl_sess_info(bit<32> teid,
                             bit<32> s1u_enb_addr,
                             bit<32> s1u_sgw_addr) {
-        fabric_meta.spgw.teid = teid;
-        fabric_meta.spgw.s1u_enb_addr = s1u_enb_addr;
-        fabric_meta.spgw.s1u_sgw_addr = s1u_sgw_addr;
+        spgw_meta.teid = teid;
+        spgw_meta.s1u_enb_addr = s1u_enb_addr;
+        spgw_meta.s1u_sgw_addr = s1u_sgw_addr;
         ue_counter.count();
     }
 
     table dl_sess_lookup {
         key = {
             // UE addr for downlink
-            ipv4.dst_addr : exact @name("ipv4_dst");
+            ipv4.dst_addr : exact;
         }
         actions = {
             set_dl_sess_info();
-            @defaultonly nop();
         }
-        const default_action = nop();
         counters = ue_counter;
     }
 
     table s1u_filter_table {
         key = {
             // IP addresses of the S1U interfaces of this SPGW-U instance (when uplink)
-            gtpu_ipv4.dst_addr : exact @name("gtp_ipv4_dst");
+            gtpu_ipv4.dst_addr : exact;
         }
         actions = {
-            nop();
+            NoAction();
         }
-        const default_action = nop();
     }
 
 #ifdef WITH_SPGW_PCC_GATING
     action set_sdf_rule_id(sdf_rule_id_t id) {
-        fabric_meta.spgw.sdf_rule_id = id;
+        spgw_meta.sdf_rule_id = id;
     }
 
     action set_pcc_rule_id(pcc_rule_id_t id) {
-        fabric_meta.spgw.pcc_rule_id = id;
+        spgw_meta.pcc_rule_id = id;
     }
 
     action set_pcc_info(pcc_gate_status_t gate_status) {
-        fabric_meta.spgw.pcc_gate_status = gate_status;
+        spgw_meta.pcc_gate_status = gate_status;
     }
 
     table sdf_rule_lookup {
         key = {
-            fabric_meta.spgw.direction   : exact @name("spgw_direction");
-            ipv4.src_addr                : ternary @name("ipv4_src");
-            ipv4.dst_addr                : ternary @name("ipv4_dst");
-            ipv4.protocol                : ternary @name("ip_proto");
-            fabric_meta.l4_sport         : ternary @name("l4_sport");
-            fabric_meta.l4_dport         : ternary @name("l4_dport");
+            spgw_meta.direction   : exact;
+            ipv4.src_addr         : ternary;
+            ipv4.dst_addr         : ternary;
+            ipv4.protocol         : ternary;
+            spgw_meta.l4_src_port : ternary;
+            spgw_meta.l4_dst_port : ternary;
         }
         actions = {
             set_sdf_rule_id();
@@ -121,7 +116,7 @@ control spgw_ingress(
 
     table pcc_rule_lookup {
         key = {
-            fabric_meta.spgw.sdf_rule_id : exact @name("sdf_rule_id");
+            spgw_meta.sdf_rule_id : exact;
         }
         actions = {
             set_pcc_rule_id();
@@ -131,7 +126,7 @@ control spgw_ingress(
 
     table pcc_info_lookup {
         key = {
-            fabric_meta.spgw.pcc_rule_id : exact @name("pcc_rule_id");
+            spgw_meta.pcc_rule_id : exact;
         }
         actions = {
             set_pcc_info();
@@ -146,33 +141,33 @@ control spgw_ingress(
             // S1U_SGW_PREFIX/S1U_SGW_PREFIX_LEN subnet.
             // TODO: check also that gtpu.msgtype == GTP_GPDU
             if (!s1u_filter_table.apply().hit) {
-                mark_to_drop(standard_metadata);
+                drop_now();
             }
-            fabric_meta.spgw.direction = SPGW_DIR_UPLINK;
+            spgw_meta.direction = SPGW_DIR_UPLINK;
             gtpu_decap();
         } else if (dl_sess_lookup.apply().hit) {
-            fabric_meta.spgw.direction = SPGW_DIR_DOWNLINK;
+            spgw_meta.direction = SPGW_DIR_DOWNLINK;
         } else {
-            fabric_meta.spgw.direction = SPGW_DIR_UNKNOWN;
+            spgw_meta.direction = SPGW_DIR_UNKNOWN;
             // No SPGW processing needed.
             return;
         }
 
 #ifdef WITH_SPGW_PCC_GATING
         // Allow all traffic by default.
-        fabric_meta.spgw.pcc_gate_status = PCC_GATE_OPEN;
+        spgw_meta.pcc_gate_status = PCC_GATE_OPEN;
 
         sdf_rule_lookup.apply();
         pcc_rule_lookup.apply();
         pcc_info_lookup.apply();
 
-        if (fabric_meta.spgw.pcc_gate_status == PCC_GATE_CLOSED) {
-            mark_to_drop(standard_metadata);
+        if (spgw_meta.pcc_gate_status == PCC_GATE_CLOSED) {
+            drop_now();
         }
 #endif // WITH_SPGW_PCC_GATING
 
         // Don't ask why... we'll need this later.
-        fabric_meta.spgw.ipv4_len = ipv4.total_len;
+        spgw_meta.ipv4_len = ipv4.total_len;
     }
 }
 
@@ -182,11 +177,10 @@ control spgw_egress(
         inout ipv4_t              gtpu_ipv4,
         inout udp_t               gtpu_udp,
         inout gtpu_t              gtpu,
-        in    fabric_metadata_t   fabric_meta,
+        in    spgw_meta_t         spgw_meta,
         in    standard_metadata_t std_meta
     ) {
 
-    @hidden
     action gtpu_encap() {
         gtpu_ipv4.setValid();
         gtpu_ipv4.version = IP_VERSION_4;
@@ -200,14 +194,14 @@ control spgw_egress(
         gtpu_ipv4.frag_offset = 0;
         gtpu_ipv4.ttl = DEFAULT_IPV4_TTL;
         gtpu_ipv4.protocol = PROTO_UDP;
-        gtpu_ipv4.dst_addr = fabric_meta.spgw.s1u_enb_addr;
-        gtpu_ipv4.src_addr = fabric_meta.spgw.s1u_sgw_addr;
+        gtpu_ipv4.dst_addr = spgw_meta.s1u_enb_addr;
+        gtpu_ipv4.src_addr = spgw_meta.s1u_sgw_addr;
         gtpu_ipv4.hdr_checksum = 0; // Updated later
 
         gtpu_udp.setValid();
-        gtpu_udp.sport = UDP_PORT_GTPU;
-        gtpu_udp.dport = UDP_PORT_GTPU;
-        gtpu_udp.len = fabric_meta.spgw.ipv4_len
+        gtpu_udp.src_port = UDP_PORT_GTPU;
+        gtpu_udp.dst_port = UDP_PORT_GTPU;
+        gtpu_udp.len = spgw_meta.ipv4_len
                 + (UDP_HDR_SIZE + GTP_HDR_SIZE);
         gtpu_udp.checksum = 0; // Updated later
 
@@ -219,12 +213,12 @@ control spgw_egress(
         gtpu.seq_flag = 0;
         gtpu.npdu_flag = 0;
         gtpu.msgtype = GTP_GPDU;
-        gtpu.msglen = fabric_meta.spgw.ipv4_len;
-        gtpu.teid = fabric_meta.spgw.teid;
+        gtpu.msglen = spgw_meta.ipv4_len;
+        gtpu.teid = spgw_meta.teid;
     }
 
     apply {
-        if (fabric_meta.spgw.direction == SPGW_DIR_DOWNLINK) {
+        if (spgw_meta.direction == SPGW_DIR_DOWNLINK) {
             gtpu_encap();
         }
     }
@@ -268,8 +262,8 @@ control update_gtpu_checksum(
                 8w0,
                 gtpu_ipv4.protocol,
                 gtpu_udp.len,
-                gtpu_udp.sport,
-                gtpu_udp.dport,
+                gtpu_udp.src_port,
+                gtpu_udp.dst_port,
                 gtpu_udp.len,
                 gtpu,
                 ipv4,

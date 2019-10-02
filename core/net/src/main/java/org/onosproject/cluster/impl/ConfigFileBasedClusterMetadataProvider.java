@@ -30,13 +30,11 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
-
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
-
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.cluster.ClusterMetadata;
 import org.onosproject.cluster.ClusterMetadataProvider;
 import org.onosproject.cluster.ClusterMetadataProviderRegistry;
@@ -66,7 +64,7 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
     private static final String CONFIG_FILE_NAME = "cluster.json";
     private static final File CONFIG_FILE = new File(CONFIG_DIR, CONFIG_FILE_NAME);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterMetadataProviderRegistry providerRegistry;
 
     private static final ProviderId PROVIDER_ID = new ProviderId("file", "none");
@@ -117,7 +115,6 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
                 .stream()
                 .map(this::toPrototype)
                 .collect(Collectors.toSet()));
-        prototype.setStorageDnsService(metadata.getStorageDnsService());
         prototype.setStorage(metadata.getStorageNodes()
                 .stream()
                 .map(this::toPrototype)
@@ -275,7 +272,6 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
                         .stream()
                         .map(node -> new DefaultControllerNode(getNodeId(node), getNodeHost(node), getNodePort(node)))
                         .collect(Collectors.toSet()),
-                    metadata.getStorageDnsService(),
                     metadata.getStorage()
                         .stream()
                         .map(node -> new DefaultControllerNode(getNodeId(node), getNodeHost(node), getNodePort(node)))
@@ -312,7 +308,6 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
         private String name;
         private NodePrototype node;
         private Set<NodePrototype> controller = Sets.newHashSet();
-        private String storageDnsService;
         private Set<NodePrototype> storage = Sets.newHashSet();
         private String clusterSecret;
 
@@ -338,14 +333,6 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
 
         public void setController(Set<NodePrototype> controller) {
             this.controller = controller;
-        }
-
-        public String getStorageDnsService() {
-            return storageDnsService;
-        }
-
-        public void setStorageDnsService(String storageDnsService) {
-            this.storageDnsService = storageDnsService;
         }
 
         public Set<NodePrototype> getStorage() {

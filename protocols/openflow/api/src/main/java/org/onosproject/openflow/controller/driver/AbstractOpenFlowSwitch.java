@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.onosproject.openflow.controller.driver;
 
 import com.google.common.base.MoreObjects;
@@ -22,8 +23,6 @@ import com.google.common.collect.Lists;
 import org.onosproject.net.Device;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.openflow.controller.Dpid;
-import org.onosproject.openflow.controller.OpenFlowClassifier;
-import org.onosproject.openflow.controller.OpenFlowClassifierListener;
 import org.onosproject.openflow.controller.OpenFlowSession;
 import org.onosproject.openflow.controller.RoleState;
 import org.projectfloodlight.openflow.protocol.OFDescStatsReply;
@@ -98,8 +97,6 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     private OFDescStatsReply desc;
 
     private OFMeterFeaturesStatsReply meterfeatures;
-
-    protected OpenFlowClassifierListener classifierListener = new InternalClassifierListener();
 
     // messagesPendingMastership is used as synchronization variable for
     // all mastership related changes. In this block, mastership (including
@@ -290,7 +287,7 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
                 }
                 this.agent.processMessage(dpid, m);
             } catch (Exception e) {
-                log.warn("Unhandled exception processing {}@{}:{}", m, dpid, e.getMessage());
+                log.warn("Unhandled exception processing {}@{}", m, dpid, e);
             }
         } else {
             log.trace("Dropping received message {}, was not MASTER", m);
@@ -304,11 +301,7 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
 
     @Override
     public final boolean connectSwitch() {
-        boolean status = this.agent.addConnectedSwitch(dpid, this);
-        if (status) {
-            this.agent.addClassifierListener(classifierListener);
-        }
-        return status;
+        return this.agent.addConnectedSwitch(dpid, this);
     }
 
     @Override
@@ -346,7 +339,6 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     @Override
     public final void removeConnectedSwitch() {
         this.agent.removeConnectedSwitch(dpid);
-        this.agent.removeClassifierListener(classifierListener);
     }
 
     @Override
@@ -573,18 +565,5 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
                 .add("session", channel.sessionInfo())
                 .add("dpid", dpid)
                 .toString();
-    }
-
-    private class InternalClassifierListener implements OpenFlowClassifierListener {
-
-        @Override
-        public void handleClassifiersAdd(OpenFlowClassifier classifier) {
-            channel.addClassifier(classifier);
-        }
-
-        @Override
-        public void handleClassifiersRemove(OpenFlowClassifier classifier) {
-            channel.removeClassifier(classifier);
-        }
     }
 }

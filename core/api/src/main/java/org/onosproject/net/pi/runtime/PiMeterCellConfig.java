@@ -20,7 +20,6 @@ import com.google.common.annotations.Beta;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
-import org.onosproject.net.DeviceId;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -69,11 +68,6 @@ public final class PiMeterCellConfig implements PiEntity {
     @Override
     public PiEntityType piEntityType() {
         return PiEntityType.METER_CELL_CONFIG;
-    }
-
-    @Override
-    public PiMeterCellHandle handle(DeviceId deviceId) {
-        return PiMeterCellHandle.of(deviceId, this);
     }
 
     @Override

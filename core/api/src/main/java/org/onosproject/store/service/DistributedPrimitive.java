@@ -136,6 +136,12 @@ public interface DistributedPrimitive {
     long DEFAULT_OPERATION_TIMEOUT_MILLIS = 15000L;
 
     /**
+     * Use {@link #DEFAULT_OPERATION_TIMEOUT_MILLIS} instead.
+     */
+    @Deprecated
+    long DEFAULT_OPERTATION_TIMEOUT_MILLIS = DEFAULT_OPERATION_TIMEOUT_MILLIS;
+
+    /**
      * Returns the name of this primitive.
      * @return name
      */

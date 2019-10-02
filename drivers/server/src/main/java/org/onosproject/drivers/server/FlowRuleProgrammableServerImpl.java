@@ -40,7 +40,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -252,26 +251,16 @@ public class FlowRuleProgrammableServerImpl extends BasicServerDriver
 
         rules.forEach(rule -> {
             if (!(rule instanceof FlowEntry)) {
-                NicFlowRule nicRule = null;
+                NicFlowRule nicRule = (NicFlowRule) rule;
+                String tcId = nicRule.trafficClassId();
 
-                // Only NicFlowRules are accepted
-                try {
-                    nicRule = (NicFlowRule) rule;
-                } catch (ClassCastException cEx) {
-                    log.warn("Skipping rule not crafted for NIC: {}", rule);
+                // Create a bucket of flow rules for this traffic class
+                if (!rulesPerTc.containsKey(tcId)) {
+                    rulesPerTc.put(tcId, Sets.<FlowRule>newConcurrentHashSet());
                 }
 
-                if (nicRule != null) {
-                    String tcId = nicRule.trafficClassId();
-
-                    // Create a bucket of flow rules for this traffic class
-                    if (!rulesPerTc.containsKey(tcId)) {
-                        rulesPerTc.put(tcId, Sets.<FlowRule>newConcurrentHashSet());
-                    }
-
-                    Set<FlowRule> tcRuleSet = rulesPerTc.get(tcId);
-                    tcRuleSet.add(nicRule);
-                }
+                Set<FlowRule> tcRuleSet = rulesPerTc.get(tcId);
+                tcRuleSet.add(nicRule);
             }
         });
 
@@ -308,8 +297,7 @@ public class FlowRuleProgrammableServerImpl extends BasicServerDriver
     private Collection<FlowRule> installNicFlowRules(
             DeviceId deviceId, String trafficClassId,
             Collection<FlowRule> rules) {
-        int rulesToInstall = rules.size();
-        if (rulesToInstall == 0) {
+        if (rules.isEmpty()) {
             return Collections.EMPTY_LIST;
         }
 
@@ -331,16 +319,9 @@ public class FlowRuleProgrammableServerImpl extends BasicServerDriver
             new ConcurrentHashMap<Long, ArrayNode>();
 
         String nic = null;
-        Iterator<FlowRule> it = rules.iterator();
 
-        while (it.hasNext()) {
-            NicFlowRule nicRule = (NicFlowRule) it.next();
-            if (nicRule.isFullWildcard() && (rulesToInstall > 1)) {
-                log.warn("Skipping wildcard rule: {}", nicRule);
-                it.remove();
-                continue;
-            }
-
+        for (FlowRule rule : rules) {
+            NicFlowRule nicRule = (NicFlowRule) rule;
             long coreIndex = nicRule.cpuCoreIndex();
 
             // Keep the ID of the target NIC
@@ -364,11 +345,6 @@ public class FlowRuleProgrammableServerImpl extends BasicServerDriver
             ruleNode.put("ruleContent", nicRule.ruleBody());
 
             ruleArrayNode.add(ruleNode);
-        }
-
-        if (rules.size() == 0) {
-            log.error("Failed to install {} NIC flow rules in device {}", rulesToInstall, deviceId);
-            return Collections.EMPTY_LIST;
         }
 
         ObjectNode nicObjNode = mapper.createObjectNode();
@@ -401,12 +377,12 @@ public class FlowRuleProgrammableServerImpl extends BasicServerDriver
 
         // Upon an error, return an empty set of rules
         if (!checkStatusCode(response)) {
-            log.error("Failed to install {} NIC flow rules in device {}", rules.size(), deviceId);
+            log.error("Failed to install NIC flow rules in device {}", deviceId);
             return Collections.EMPTY_LIST;
         }
 
-        log.info("Successfully installed {}/{} NIC flow rules in device {}",
-            rules.size(), rulesToInstall, deviceId);
+        log.info("Successfully installed {} NIC flow rules in device {}",
+            rules.size(), deviceId);
 
         // .. or all of them
         return rules;

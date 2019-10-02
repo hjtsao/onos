@@ -16,6 +16,12 @@
 package org.onosproject.drivers.optical;
 
 import com.google.common.annotations.Beta;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.link.LinkDescription;
@@ -23,11 +29,6 @@ import org.onosproject.net.link.LinkProvider;
 import org.onosproject.net.link.LinkProviderRegistry;
 import org.onosproject.net.link.LinkProviderService;
 import org.onosproject.net.provider.ProviderId;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import static org.slf4j.LoggerFactory.getLogger;
@@ -40,7 +41,8 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Registers a dummy LinkProvider to get an instance of LinkProviderService.
  */
 @Beta
-@Component(immediate = true, service = OpticalAdjacencyLinkService.class)
+@Component(immediate = true)
+@Service
 public class OpticalAdjacencyLinkManager implements OpticalAdjacencyLinkService {
 
     private static final ProviderId PID =
@@ -51,7 +53,7 @@ public class OpticalAdjacencyLinkManager implements OpticalAdjacencyLinkService 
     private LinkProvider linkProvider = new StubLinkProvider();
     private LinkProviderService linkProviderService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LinkProviderRegistry linkProviderRegistry;
 
     @Activate

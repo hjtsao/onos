@@ -16,6 +16,11 @@
 
 package org.onosproject.pipelines.fabric;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.core.CoreService;
 import org.onosproject.inbandtelemetry.api.IntProgrammable;
 import org.onosproject.net.behaviour.Pipeliner;
@@ -31,11 +36,6 @@ import org.onosproject.p4runtime.model.P4InfoParserException;
 import org.onosproject.pipelines.fabric.pipeliner.FabricPipeliner;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.wiring.BundleWiring;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.io.File;
@@ -79,17 +79,17 @@ public class PipeconfLoader {
     private static final String P4INFO_TXT = "p4info.txt";
     private static final String CPU_PORT_TXT = "cpu_port.txt";
     private static final String SPECTRUM_BIN = "spectrum.bin";
-    private static final String TOFINO_BIN = "pipe/tofino.bin";
-    private static final String TOFINO_CTX_JSON = "pipe/context.json";
+    private static final String TOFINO_BIN = "tofino.bin";
+    private static final String TOFINO_CTX_JSON = "context.json";
     private static final String INT_PROFILE_SUFFIX = "-int";
     private static final String FULL_PROFILE_SUFFIX = "-full";
 
     private static final Collection<PiPipeconf> PIPECONFS = buildAllPipeconf();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private PiPipeconfService piPipeconfService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private CoreService coreService;
 
     @Activate
@@ -101,7 +101,7 @@ public class PipeconfLoader {
 
     @Deactivate
     public void deactivate() {
-        PIPECONFS.stream().map(PiPipeconf::id).forEach(piPipeconfService::unregister);
+        PIPECONFS.stream().map(PiPipeconf::id).forEach(piPipeconfService::remove);
     }
 
     private static Collection<PiPipeconf> buildAllPipeconf() {
@@ -153,7 +153,7 @@ public class PipeconfLoader {
         }
         // Add IntProgrammable behaviour for INT-enabled profiles.
         if (profile.endsWith(INT_PROFILE_SUFFIX) || profile.endsWith(FULL_PROFILE_SUFFIX)) {
-            pipeconfBuilder.addBehaviour(IntProgrammable.class, FabricIntProgrammable.class);
+            pipeconfBuilder.addBehaviour(IntProgrammable.class, IntProgrammableImpl.class);
         }
         return pipeconfBuilder.build();
     }

@@ -13,28 +13,24 @@
 # limitations under the License.
 
 def _impl(ctx):
-    outjar = ctx.outputs.jar
+    jar = ctx.outputs.jar
 
     src_list = ""
     for src in ctx.files.srcs:
         if src.path.endswith(".srcjar"):
             src_list += " " + src.path
 
-    java_runtime = ctx.attr._jdk[java_common.JavaRuntimeInfo]
-    jar_path = "%s/bin/jar" % java_runtime.java_home
-
     cmd = [
-        "for sj in %s; do %s xf $sj; done" % (src_list, jar_path),
+        "for sj in %s; do jar xf $sj; done" % src_list,
         "dir=$(find . -type d -name java)",
-        "[ -n \"$dir\" -a -d \"$dir\" ] && %s cf %s -C $dir ." % (jar_path, outjar.path),
+        "[ -n \"$dir\" -a -d \"$dir\" ] && jar cf %s -C $dir ." % jar.path,
     ]
 
     ctx.action(
         inputs = ctx.files.srcs,
-        outputs = [outjar],
+        outputs = [jar],
         progress_message = "Generating source jar for %s" % ctx.attr.name,
         command = ";\n".join(cmd),
-        tools = java_runtime.files,
     )
 
 def _impl_alt(ctx):
@@ -72,10 +68,6 @@ Args:
 java_sources = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
-        "_jdk": attr.label(
-            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
-            providers = [java_common.JavaRuntimeInfo],
-        ),
     },
     implementation = _impl,
     outputs = {"jar": "%{name}.jar"},

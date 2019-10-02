@@ -18,13 +18,13 @@ package org.onosproject.net.pi.service;
 
 import com.google.common.annotations.Beta;
 import org.onosproject.net.group.Group;
-import org.onosproject.net.pi.runtime.PiActionProfileGroup;
+import org.onosproject.net.pi.runtime.PiActionGroup;
 
 /**
  * A PI translation store that keeps track of which groups have been
- * translated to which PI action profile groups.
+ * translated to which PI action groups.
  */
 @Beta
 public interface PiGroupTranslationStore
-        extends PiTranslationStore<Group, PiActionProfileGroup> {
+        extends PiTranslationStore<Group, PiActionGroup> {
 }

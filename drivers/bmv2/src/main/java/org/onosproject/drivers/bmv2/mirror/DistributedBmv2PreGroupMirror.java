@@ -17,6 +17,8 @@
 
 package org.onosproject.drivers.bmv2.mirror;
 
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.drivers.bmv2.api.runtime.Bmv2EntityType;
 import org.onosproject.drivers.bmv2.api.runtime.Bmv2PreGroup;
@@ -24,7 +26,6 @@ import org.onosproject.drivers.bmv2.api.runtime.Bmv2PreGroupHandle;
 import org.onosproject.drivers.bmv2.api.runtime.Bmv2PreNode;
 import org.onosproject.drivers.bmv2.api.runtime.Bmv2PreNodes;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.osgi.service.component.annotations.Component;
 
 
 /**
@@ -32,7 +33,8 @@ import org.osgi.service.component.annotations.Component;
  * We need this mirror to preserve BMv2-specific identifiers of group
  * and nodes for further operations on them after creation.
  */
-@Component(immediate = true, service = Bmv2PreGroupMirror.class)
+@Component(immediate = true)
+@Service
 public class DistributedBmv2PreGroupMirror
         extends AbstractDistributedBmv2Mirror<Bmv2PreGroupHandle, Bmv2PreGroup>
         implements Bmv2PreGroupMirror {

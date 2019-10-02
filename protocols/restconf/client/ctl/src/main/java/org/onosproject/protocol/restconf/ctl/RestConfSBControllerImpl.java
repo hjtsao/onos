@@ -15,6 +15,10 @@
  */
 package org.onosproject.protocol.restconf.ctl;
 
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Service;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
@@ -22,9 +26,6 @@ import org.onosproject.protocol.http.ctl.HttpSBControllerImpl;
 import org.onosproject.protocol.rest.RestSBDevice;
 import org.onosproject.protocol.restconf.RestConfSBController;
 import org.onosproject.protocol.restconf.RestconfNotificationEventListener;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,8 @@ import java.util.concurrent.Executors;
 /**
  * The implementation of RestConfSBController.
  */
-@Component(immediate = true, service = RestConfSBController.class)
+@Component(immediate = true)
+@Service
 public class RestConfSBControllerImpl extends HttpSBControllerImpl
         implements RestConfSBController {
 

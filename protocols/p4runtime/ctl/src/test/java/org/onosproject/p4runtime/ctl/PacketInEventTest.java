@@ -21,10 +21,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.onlab.util.ImmutableByteSequence;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.pi.model.PiPacketMetadataId;
-import org.onosproject.net.pi.runtime.PiPacketMetadata;
+import org.onosproject.net.pi.model.PiControlMetadataId;
+import org.onosproject.net.pi.runtime.PiControlMetadata;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
-import org.onosproject.p4runtime.ctl.controller.PacketInEvent;
 
 import static org.onlab.util.ImmutableByteSequence.copyFrom;
 import static org.onosproject.net.pi.model.PiPacketOperationType.PACKET_IN;
@@ -47,9 +46,9 @@ public class PacketInEventTest {
     private PiPacketOperation packetOperation2;
     private PiPacketOperation nullPacketOperation = null;
 
-    private org.onosproject.p4runtime.ctl.controller.PacketInEvent packetIn;
-    private org.onosproject.p4runtime.ctl.controller.PacketInEvent sameAsPacketIn;
-    private org.onosproject.p4runtime.ctl.controller.PacketInEvent packetIn2;
+    private PacketInEvent packetIn;
+    private PacketInEvent sameAsPacketIn;
+    private PacketInEvent packetIn2;
     private PacketInEvent packetIn3;
 
     /**
@@ -60,27 +59,29 @@ public class PacketInEventTest {
     public void setup() throws ImmutableByteSequence.ByteSequenceTrimException {
 
         packetOperation = PiPacketOperation.builder()
+                .forDevice(deviceId)
                 .withData(ImmutableByteSequence.ofOnes(512))
                 .withType(PACKET_OUT)
-                .withMetadata(PiPacketMetadata.builder()
-                                      .withId(PiPacketMetadataId.of("egress_port"))
+                .withMetadata(PiControlMetadata.builder()
+                                      .withId(PiControlMetadataId.of("egress_port"))
                                       .withValue(copyFrom(DEFAULT_ORIGINAL_VALUE).fit(DEFAULT_BIT_WIDTH))
                                       .build())
                 .build();
 
         packetOperation2 = PiPacketOperation.builder()
+                .forDevice(deviceId2)
                 .withData(ImmutableByteSequence.ofOnes(512))
                 .withType(PACKET_IN)
-                .withMetadata(PiPacketMetadata.builder()
-                                      .withId(PiPacketMetadataId.of("ingress_port"))
+                .withMetadata(PiControlMetadata.builder()
+                                      .withId(PiControlMetadataId.of("ingress_port"))
                                       .withValue(copyFrom(DEFAULT_ORIGINAL_VALUE).fit(DEFAULT_BIT_WIDTH))
                                       .build())
                 .build();
 
-        packetIn = new org.onosproject.p4runtime.ctl.controller.PacketInEvent(deviceId, packetOperation);
-        sameAsPacketIn = new org.onosproject.p4runtime.ctl.controller.PacketInEvent(sameDeviceId, packetOperation);
-        packetIn2 = new org.onosproject.p4runtime.ctl.controller.PacketInEvent(deviceId2, packetOperation);
-        packetIn3 = new org.onosproject.p4runtime.ctl.controller.PacketInEvent(deviceId, packetOperation2);
+        packetIn = new PacketInEvent(deviceId, packetOperation);
+        sameAsPacketIn = new PacketInEvent(sameDeviceId, packetOperation);
+        packetIn2 = new PacketInEvent(deviceId2, packetOperation);
+        packetIn3 = new PacketInEvent(deviceId, packetOperation2);
     }
 
     /**
@@ -104,7 +105,7 @@ public class PacketInEventTest {
     @Test(expected = NullPointerException.class)
     public void testConstructorWithNullDeviceId() {
 
-        new org.onosproject.p4runtime.ctl.controller.PacketInEvent(nullDeviceId, packetOperation);
+        new PacketInEvent(nullDeviceId, packetOperation);
     }
 
     /**
@@ -113,7 +114,7 @@ public class PacketInEventTest {
     @Test(expected = NullPointerException.class)
     public void testConstructorWithNullPacketOperation() {
 
-        new org.onosproject.p4runtime.ctl.controller.PacketInEvent(deviceId, nullPacketOperation);
+        new PacketInEvent(deviceId, nullPacketOperation);
     }
 
     /**

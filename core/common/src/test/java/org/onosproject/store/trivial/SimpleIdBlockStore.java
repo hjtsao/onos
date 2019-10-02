@@ -15,9 +15,10 @@
  */
 package org.onosproject.store.trivial;
 
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.IdBlock;
 import org.onosproject.core.IdBlockStore;
-import org.osgi.service.component.annotations.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,7 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Simple implementation of id block store.
  */
-@Component(immediate = true, service = IdBlockStore.class)
+@Component(immediate = true)
+@Service
 public class SimpleIdBlockStore implements IdBlockStore {
 
     private static final long DEFAULT_BLOCK_SIZE = 0x1000L;

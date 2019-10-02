@@ -16,6 +16,12 @@
 package org.onosproject.store.intent.impl;
 
 import com.google.common.annotations.Beta;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.intent.IntentId;
 import org.onosproject.net.intent.IntentSetMultimap;
@@ -24,11 +30,6 @@ import org.onosproject.store.service.ConsistentMap;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Versioned;
-import org.osgi.service.component.annotations.Activate;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
@@ -40,7 +41,8 @@ import static org.slf4j.LoggerFactory.getLogger;
  * A collection that maps Intent IDs as keys to values as Intent IDs,
  * where each key may associated with multiple values without duplication.
  */
-@Component(immediate = true, service = IntentSetMultimap.class)
+@Component(immediate = true)
+@Service
 @Beta
 public class ConsistentIntentSetMultimap implements IntentSetMultimap {
     private final Logger log = getLogger(getClass());
@@ -51,10 +53,10 @@ public class ConsistentIntentSetMultimap implements IntentSetMultimap {
 
     private ConsistentMap<IntentId, Set<IntentId>> intentMapping;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
     @Activate

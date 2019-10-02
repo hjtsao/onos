@@ -16,8 +16,6 @@
 
 package org.onosproject.pipelines.fabric.pipeliner;
 
-import com.google.common.collect.ImmutableList;
-import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.onlab.packet.Ethernet;
@@ -25,7 +23,6 @@ import org.onlab.packet.IPv4;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.TpPort;
 import org.onlab.packet.UDP;
-import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -36,13 +33,7 @@ import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flowobjective.DefaultForwardingObjective;
 import org.onosproject.net.flowobjective.ForwardingObjective;
-import org.onosproject.net.group.DefaultGroupBucket;
-import org.onosproject.net.group.DefaultGroupDescription;
-import org.onosproject.net.group.DefaultGroupKey;
-import org.onosproject.net.group.GroupBucket;
-import org.onosproject.net.group.GroupBuckets;
 import org.onosproject.net.group.GroupDescription;
-import org.onosproject.net.group.GroupKey;
 import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
@@ -58,20 +49,13 @@ import static org.junit.Assert.assertTrue;
  */
 public class FabricForwardingPipelineTest extends FabricPipelinerTest {
 
-    private ForwardingObjectiveTranslator translator;
-
-    @Before
-    public void setup() {
-        super.doSetup();
-        translator = new ForwardingObjectiveTranslator(DEVICE_ID, capabilitiesHashed);
-    }
-
     /**
      * Test versatile flag of forwarding objective with ARP match.
      */
     @Test
     public void testAclArp() {
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                .wipeDeferred()
                 .punt()
                 .build();
         // ARP
@@ -87,53 +71,25 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
                 .withTreatment(treatment)
                 .add();
 
-        ObjectiveTranslation result = translator.translate(fwd);
+        PipelinerTranslationResult result = pipeliner.pipelinerForward.forward(fwd);
 
         List<FlowRule> flowRulesInstalled = (List<FlowRule>) result.flowRules();
         List<GroupDescription> groupsInstalled = (List<GroupDescription>) result.groups();
         assertEquals(1, flowRulesInstalled.size());
-        assertEquals(1, groupsInstalled.size());
+        assertTrue(groupsInstalled.isEmpty());
 
         FlowRule actualFlowRule = flowRulesInstalled.get(0);
-        PiAction piAction = PiAction.builder()
-                .withId(FabricConstants.FABRIC_INGRESS_ACL_SET_CLONE_SESSION_ID)
-                .withParameter(new PiActionParam(
-                        FabricConstants.CLONE_ID,
-                        ForwardingObjectiveTranslator.CLONE_TO_CPU_ID))
-                .build();
         FlowRule expectedFlowRule = DefaultFlowRule.builder()
                 .forDevice(DEVICE_ID)
-                .forTable(FabricConstants.FABRIC_INGRESS_ACL_ACL)
+                .forTable(FabricConstants.FABRIC_INGRESS_FORWARDING_ACL)
                 .withPriority(PRIORITY)
                 .makePermanent()
                 .withSelector(selector)
-                .withTreatment(DefaultTrafficTreatment.builder()
-                                       .piTableAction(piAction).build())
+                .withTreatment(treatment)
                 .fromApp(APP_ID)
                 .build();
 
-        GroupDescription actualCloneGroup = groupsInstalled.get(0);
-        TrafficTreatment cloneGroupTreatment = DefaultTrafficTreatment.builder()
-                .setOutput(PortNumber.CONTROLLER)
-                .build();
-
-        List<GroupBucket> cloneBuckets = ImmutableList.of(
-                DefaultGroupBucket.createCloneGroupBucket(cloneGroupTreatment));
-
-        GroupBuckets cloneGroupBuckets = new GroupBuckets(cloneBuckets);
-        GroupKey cloneGroupKey = new DefaultGroupKey(
-                FabricPipeliner.KRYO.serialize(ForwardingObjectiveTranslator.CLONE_TO_CPU_ID));
-        GroupDescription expectedCloneGroup = new DefaultGroupDescription(
-                DEVICE_ID,
-                GroupDescription.Type.CLONE,
-                cloneGroupBuckets,
-                cloneGroupKey,
-                ForwardingObjectiveTranslator.CLONE_TO_CPU_ID,
-                APP_ID
-        );
-
         assertTrue(expectedFlowRule.exactMatch(actualFlowRule));
-        assertTrue(expectedCloneGroup.equals(actualCloneGroup));
     }
 
     /**
@@ -161,7 +117,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
                 .withTreatment(treatment)
                 .add();
 
-        ObjectiveTranslation result = translator.translate(fwd);
+        PipelinerTranslationResult result = pipeliner.pipelinerForward.forward(fwd);
 
         List<FlowRule> flowRulesInstalled = (List<FlowRule>) result.flowRules();
         List<GroupDescription> groupsInstalled = (List<GroupDescription>) result.groups();
@@ -169,17 +125,13 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
         assertTrue(groupsInstalled.isEmpty());
 
         FlowRule actualFlowRule = flowRulesInstalled.get(0);
-        PiAction piAction = PiAction.builder()
-                .withId(FabricConstants.FABRIC_INGRESS_ACL_PUNT_TO_CPU)
-                .build();
         FlowRule expectedFlowRule = DefaultFlowRule.builder()
                 .forDevice(DEVICE_ID)
-                .forTable(FabricConstants.FABRIC_INGRESS_ACL_ACL)
+                .forTable(FabricConstants.FABRIC_INGRESS_FORWARDING_ACL)
                 .withPriority(PRIORITY)
                 .makePermanent()
                 .withSelector(selector)
-                .withTreatment(DefaultTrafficTreatment.builder()
-                                       .piTableAction(piAction).build())
+                .withTreatment(treatment)
                 .fromApp(APP_ID)
                 .build();
 
@@ -190,7 +142,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
      * Test programming L2 unicast rule to bridging table.
      */
     @Test
-    public void testL2Unicast() throws FabricPipelinerException {
+    public void testL2Unicast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchVlanId(VLAN_100)
                 .matchEthDst(HOST_MAC)
@@ -200,7 +152,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     @Test
-    public void testL2Broadcast() throws FabricPipelinerException {
+    public void testL2Broadcast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchVlanId(VLAN_100)
                 .build();
@@ -209,7 +161,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     @Test
-    public void testIPv4Unicast() throws FabricPipelinerException {
+    public void testIPv4Unicast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV4)
                 .matchIPDst(IPV4_UNICAST_ADDR)
@@ -222,7 +174,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     @Test
-    public void testIPv4UnicastWithNoNextId() throws FabricPipelinerException {
+    public void testIPv4UnicastWithNoNextId() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV4)
                 .matchIPDst(IPV4_UNICAST_ADDR)
@@ -236,7 +188,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
 
     @Test
     @Ignore
-    public void testIPv4Multicast() throws FabricPipelinerException {
+    public void testIPv4Multicast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV4)
                 .matchVlanId(VLAN_100)
@@ -251,7 +203,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
 
     @Test
     @Ignore
-    public void testIPv6Unicast() throws FabricPipelinerException {
+    public void testIPv6Unicast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV6)
                 .matchIPDst(IPV6_UNICAST_ADDR)
@@ -266,7 +218,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
 
     @Test
     @Ignore
-    public void testIPv6Multicast() throws FabricPipelinerException {
+    public void testIPv6Multicast() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV6)
                 .matchVlanId(VLAN_100)
@@ -280,7 +232,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     @Test
-    public void testMpls() throws FabricPipelinerException {
+    public void testMpls() {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.MPLS_UNICAST)
                 .matchMplsLabel(MPLS_10)
@@ -303,16 +255,11 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     private void testSpecificForward(PiTableId expectedTableId, TrafficSelector expectedSelector,
-                                     TrafficSelector selector, Integer nextId) throws FabricPipelinerException {
+                                     TrafficSelector selector, Integer nextId) {
         TrafficTreatment setNextIdTreatment;
         if (nextId == null) {
             // Ref: RoutingRulePopulator.java->revokeIpRuleForRouter
-
-            setNextIdTreatment = DefaultTrafficTreatment.builder().
-                    piTableAction(PiAction.builder()
-                                          .withId(FabricConstants.FABRIC_INGRESS_FORWARDING_NOP_ROUTING_V4)
-                                          .build())
-                    .build();
+            setNextIdTreatment = DefaultTrafficTreatment.builder().build();
         } else {
             PiActionParam nextIdParam = new PiActionParam(FabricConstants.NEXT_ID, nextId);
             PiAction.Builder setNextIdAction = PiAction.builder()
@@ -336,8 +283,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
     }
 
     private void testSpecificForward(PiTableId expectedTableId, TrafficSelector expectedSelector,
-                                     TrafficSelector selector, Integer nextId, TrafficTreatment treatment)
-            throws FabricPipelinerException {
+                                     TrafficSelector selector, Integer nextId, TrafficTreatment treatment) {
         ForwardingObjective.Builder fwd = DefaultForwardingObjective.builder()
                 .withSelector(selector)
                 .withPriority(PRIORITY)
@@ -350,7 +296,14 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
             fwd.nextStep(nextId);
         }
 
-        ObjectiveTranslation actualTranslation = translator.translate(fwd.add());
+        PipelinerTranslationResult result = pipeliner.pipelinerForward.forward(fwd.add());
+
+        List<FlowRule> flowRulesInstalled = (List<FlowRule>) result.flowRules();
+        List<GroupDescription> groupsInstalled = (List<GroupDescription>) result.groups();
+        assertEquals(1, flowRulesInstalled.size());
+        assertTrue(groupsInstalled.isEmpty());
+
+        FlowRule actualFlowRule = flowRulesInstalled.get(0);
 
         FlowRule expectedFlowRule = DefaultFlowRule.builder()
                 .forDevice(DEVICE_ID)
@@ -362,11 +315,7 @@ public class FabricForwardingPipelineTest extends FabricPipelinerTest {
                 .fromApp(APP_ID)
                 .build();
 
-        ObjectiveTranslation expectedTranslation = ObjectiveTranslation.builder()
-                .addFlowRule(expectedFlowRule)
-                .build();
-
-        assertEquals(expectedTranslation, actualTranslation);
+        assertTrue(expectedFlowRule.exactMatch(actualFlowRule));
     }
 
     private TrafficSelector buildExpectedSelector(TrafficSelector selector) {
