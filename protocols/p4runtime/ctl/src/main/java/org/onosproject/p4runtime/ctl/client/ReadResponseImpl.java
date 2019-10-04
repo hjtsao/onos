@@ -116,6 +116,7 @@ public final class ReadResponseImpl implements P4RuntimeReadClient.ReadResponse 
 
         void addEntity(P4RuntimeOuterClass.Entity entityMsg) {
             try {
+                log.info("Got entity {}", entityMsg.toString());
                 final PiEntity piEntity = CODECS.entity().decode(entityMsg, null, pipeconf);
                 entities.add(piEntity);
                 typeToEntities.put(piEntity.getClass(), piEntity);

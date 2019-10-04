@@ -232,8 +232,8 @@ public final class BasicDeviceConfig extends BasicElementConfig<DeviceId> {
      * P4MT: Get role id.
      */
     public Long roleId() {
-        String s = get(P4MT_ROLE, "0");
-        return Long.getLong(s);
+        Long l = get(P4MT_ROLE, Long.valueOf(0));
+        return l;
     }
 
     // TODO: device port meta-data to be configured via BasicPortsConfig

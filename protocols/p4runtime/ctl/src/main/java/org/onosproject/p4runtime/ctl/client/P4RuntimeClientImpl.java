@@ -90,9 +90,12 @@ public final class P4RuntimeClientImpl
         checkNotNull(controller);
         checkNotNull(pipeconfService);
 
+        log.info("Device ID:{}", this.deviceId());
         cfgService = DefaultServiceDirectory.getService(NetworkConfigService.class);
         BasicDeviceConfig cfg = cfgService.getConfig(this.deviceId(), BasicDeviceConfig.class);
-
+        if(cfg == null){
+            log.info("BasicDeviceConfig is null");
+        }
         this.roleId = cfg.roleId();
         this.p4DeviceId = clientKey.p4DeviceId();
         this.channel = channel;

@@ -751,6 +751,9 @@ public class GeneralDeviceProvider extends AbstractProvider
                 // Still waiting for some configuration.
                 return;
             }
+            if(event.configClass().equals(BasicDeviceConfig.class)){
+                log.info("Got BasicDeviceConfig for {}", deviceId);
+            }
             // Good to go.
             triggerConnect(deviceId);
             cleanUpConfigInfo(deviceId);

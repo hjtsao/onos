@@ -41,6 +41,7 @@ import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
 import org.onosproject.net.pi.runtime.PiPacketMetadata;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
+import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -71,13 +72,14 @@ import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_WCMP_CONTRO
 import static org.onosproject.pipelines.basic.BasicConstants.INGRESS_WCMP_CONTROL_WCMP_TABLE;
 import static org.onosproject.pipelines.basic.BasicConstants.NO_ACTION;
 import static org.onosproject.pipelines.basic.BasicConstants.PORT;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Interpreter implementation for basic.p4.
  */
 public class BasicInterpreterImpl extends AbstractHandlerBehaviour
         implements PiPipelineInterpreter {
-
+    private static final Logger log = getLogger(BasicInterpreterImpl.class);
     private static final int PORT_BITWIDTH = 9;
 
     private static final ImmutableBiMap<Criterion.Type, PiMatchFieldId> CRITERION_MAP =
@@ -139,6 +141,7 @@ public class BasicInterpreterImpl extends AbstractHandlerBehaviour
     @Override
     public Collection<PiPacketOperation> mapOutboundPacket(OutboundPacket packet)
             throws PiInterpreterException {
+        log.info("OutboundPacket: {}", packet.toString());
         TrafficTreatment treatment = packet.treatment();
 
         // basic.p4 supports only OUTPUT instructions.

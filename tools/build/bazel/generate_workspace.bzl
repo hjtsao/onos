@@ -733,9 +733,9 @@ def generated_maven_jars():
     if "io_netty_netty_tcnative_boringssl" not in native.existing_rules():
         java_import_external(
             name = "io_netty_netty_tcnative_boringssl",
-            jar_sha256 = "3df756e569504137e90ff368c2fe09f1f953efeddb717d47ed391dfa6ba8b7e3",
+            jar_sha256 = "96d9c14ab4c47cbad7fec9bdb083917db971d3754d6c7fa89f958bc719e230ed",
             licenses = ["notice"],
-            jar_urls = ["http://repo1.maven.org/maven2/io/netty/netty-tcnative-boringssl-static/2.0.12.Final/netty-tcnative-boringssl-static-2.0.12.Final.jar"],        )
+            jar_urls = ["http://repo1.maven.org/maven2/io/netty/netty-tcnative-boringssl-static/2.0.25.Final/netty-tcnative-boringssl-static-2.0.25.Final.jar"],        )
     if "io_netty_netty_transport" not in native.existing_rules():
         java_import_external(
             name = "io_netty_netty_transport",
@@ -1361,7 +1361,7 @@ artifact_map["@io_netty_netty_codec//:io_netty_netty_codec"] = "mvn:io.netty:net
 artifact_map["@io_netty_netty_common//:io_netty_netty_common"] = "mvn:io.netty:netty-common:jar:4.1.32.Final"
 artifact_map["@io_netty_netty_handler//:io_netty_netty_handler"] = "mvn:io.netty:netty-handler:jar:4.1.32.Final"
 artifact_map["@io_netty_netty_handler_proxy//:io_netty_netty_handler_proxy"] = "mvn:io.netty:netty-handler-proxy:jar:4.1.32.Final"
-artifact_map["@io_netty_netty_tcnative_boringssl//:io_netty_netty_tcnative_boringssl"] = "mvn:io.netty:netty-tcnative-boringssl-static:jar:2.0.12.Final"
+artifact_map["@io_netty_netty_tcnative_boringssl//:io_netty_netty_tcnative_boringssl"] = "mvn:io.netty:netty-tcnative-boringssl-static:jar:2.0.25.Final"
 artifact_map["@io_netty_netty_transport//:io_netty_netty_transport"] = "mvn:io.netty:netty-transport:jar:4.1.32.Final"
 artifact_map["@io_netty_netty_transport_native_unix_common//:io_netty_netty_transport_native_unix_common"] = "mvn:io.netty:netty-transport-native-unix-common:jar:4.1.32.Final"
 artifact_map["@io_netty_netty_transport_native_epoll//:io_netty_netty_transport_native_epoll"] = "mvn:io.netty:netty-transport-native-epoll:jar:4.1.32.Final"

@@ -301,7 +301,7 @@ public final class ReadRequestImpl implements P4RuntimeReadClient.ReadRequest {
                 new StreamObserver<P4RuntimeOuterClass.ReadResponse>() {
                     @Override
                     public void onNext(P4RuntimeOuterClass.ReadResponse value) {
-                        log.debug("Received read response from {} with {} entities...",
+                        log.info("Received read response from {} with {} entities...",
                                   client.deviceId(), value.getEntitiesCount());
                         value.getEntitiesList().forEach(responseBuilder::addEntity);
                     }
