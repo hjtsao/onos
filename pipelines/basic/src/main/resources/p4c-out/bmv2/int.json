@@ -1142,7 +1142,7 @@
           ],
           "source_info" : {
             "filename" : "include/defines.p4",
-            "line" : 28,
+            "line" : 30,
             "column" : 24,
             "source_fragment" : "255; ..."
           }

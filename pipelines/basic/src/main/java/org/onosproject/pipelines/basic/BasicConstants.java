@@ -59,7 +59,7 @@ public final class BasicConstants {
     public static final PiTableId INGRESS_HOST_METER_CONTROL_HOST_METER_TABLE =
             PiTableId.of("ingress.host_meter_control.host_meter_table");
     public static final PiTableId INGRESS_TABLE0_CONTROL_TABLE0 =
-            PiTableId.of("ingress.table0_control.table0");
+            PiTableId.of("ingress.table1_control.table1");
     // Indirect Counter IDs
     public static final PiCounterId EGRESS_PORT_COUNTERS_EGRESS_EGRESS_PORT_COUNTER =
             PiCounterId.of("egress.port_counters_egress.egress_port_counter");
@@ -69,17 +69,17 @@ public final class BasicConstants {
     public static final PiCounterId INGRESS_WCMP_CONTROL_WCMP_TABLE_COUNTER =
             PiCounterId.of("ingress.wcmp_control.wcmp_table_counter");
     public static final PiCounterId INGRESS_TABLE0_CONTROL_TABLE0_COUNTER =
-            PiCounterId.of("ingress.table0_control.table0_counter");
+            PiCounterId.of("ingress.table1_control.table1_counter");
     // Action IDs
     public static final PiActionId INGRESS_TABLE0_CONTROL_SEND_TO_CPU =
-            PiActionId.of("ingress.table0_control.send_to_cpu");
+            PiActionId.of("ingress.table1_control.send_to_cpu");
     public static final PiActionId NO_ACTION = PiActionId.of("NoAction");
     public static final PiActionId INGRESS_WCMP_CONTROL_SET_EGRESS_PORT =
             PiActionId.of("ingress.wcmp_control.set_egress_port");
     public static final PiActionId INGRESS_TABLE0_CONTROL_SET_NEXT_HOP_ID =
-            PiActionId.of("ingress.table0_control.set_next_hop_id");
+            PiActionId.of("ingress.table1_control.set_next_hop_id");
     public static final PiActionId INGRESS_TABLE0_CONTROL_SET_EGRESS_PORT =
-            PiActionId.of("ingress.table0_control.set_egress_port");
+            PiActionId.of("ingress.table1_control.set_egress_port");
     public static final PiActionId DROP = PiActionId.of("_drop");
     public static final PiActionId INGRESS_HOST_METER_CONTROL_READ_METER =
             PiActionId.of("ingress.host_meter_control.read_meter");

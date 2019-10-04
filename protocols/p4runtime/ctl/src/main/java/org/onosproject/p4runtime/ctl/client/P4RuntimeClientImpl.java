@@ -18,8 +18,13 @@ package org.onosproject.p4runtime.ctl.client;
 
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.onlab.osgi.DefaultServiceDirectory;
 import org.onosproject.grpc.ctl.AbstractGrpcClient;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.basics.BasicDeviceConfig;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
 import org.onosproject.net.pi.service.PiPipeconfService;
@@ -59,10 +64,14 @@ public final class P4RuntimeClientImpl
     static final int LONG_TIMEOUT_SECONDS = 60;
 
     private final long p4DeviceId;
+    private long roleId;
     private final ManagedChannel channel;
     private final P4RuntimeControllerImpl controller;
     private final StreamClientImpl streamClient;
     private final PipelineConfigClientImpl pipelineConfigClient;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected NetworkConfigService cfgService;
 
     /**
      * Instantiates a new client with the given arguments.
@@ -81,6 +90,10 @@ public final class P4RuntimeClientImpl
         checkNotNull(controller);
         checkNotNull(pipeconfService);
 
+        cfgService = DefaultServiceDirectory.getService(NetworkConfigService.class);
+        BasicDeviceConfig cfg = cfgService.getConfig(this.deviceId(), BasicDeviceConfig.class);
+
+        this.roleId = cfg.roleId();
         this.p4DeviceId = clientKey.p4DeviceId();
         this.channel = channel;
         this.controller = controller;
@@ -163,6 +176,13 @@ public final class P4RuntimeClientImpl
      */
     DeviceId deviceId() {
         return this.deviceId;
+    }
+
+    /**
+     * Returns the role ID ONOS will use to connect to specified device.
+     */
+    long roleId() {
+        return this.roleId;
     }
 
     /**

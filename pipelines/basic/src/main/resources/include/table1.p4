@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef __TABLE0__
-#define __TABLE0__
+#ifndef __TABLE1__
+#define __TABLE1__
 
 #include "headers.p4"
 #include "defines.p4"
 
-control table0_control(inout headers_t hdr,
+control table1_control(inout headers_t hdr,
                        inout local_metadata_t local_metadata,
                        inout standard_metadata_t standard_metadata) {
 
@@ -36,7 +36,7 @@ control table0_control(inout headers_t hdr,
         standard_metadata.egress_spec = port;
     }
 
-    table table0 {
+    table table1 {
         key = {
             standard_metadata.ingress_port : ternary;
             hdr.ethernet.src_addr          : ternary;
@@ -61,7 +61,7 @@ control table0_control(inout headers_t hdr,
     }
 
     apply {
-        table0.apply();
+        table1.apply();
      }
 }
 

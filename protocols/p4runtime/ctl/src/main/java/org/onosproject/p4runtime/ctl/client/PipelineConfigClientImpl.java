@@ -64,56 +64,64 @@ final class PipelineConfigClientImpl implements P4RuntimePipelineConfigClient {
 
         log.info("Setting pipeline config for {} to {}...",
                  client.deviceId(), pipeconf.id());
+        if(client.roleId() == 0) {
+            checkNotNull(deviceData, "deviceData cannot be null");
 
-        checkNotNull(deviceData, "deviceData cannot be null");
+            final ForwardingPipelineConfig pipelineConfigMsg =
+                    buildForwardingPipelineConfigMsg(pipeconf, deviceData);
+            if (pipelineConfigMsg == null) {
+                // Error logged in buildForwardingPipelineConfigMsg()
+                return completedFuture(false);
+            }
 
-        final ForwardingPipelineConfig pipelineConfigMsg =
-                buildForwardingPipelineConfigMsg(pipeconf, deviceData);
-        if (pipelineConfigMsg == null) {
-            // Error logged in buildForwardingPipelineConfigMsg()
-            return completedFuture(false);
-        }
+            final SetForwardingPipelineConfigRequest requestMsg =
+                    SetForwardingPipelineConfigRequest
+                            .newBuilder()
+                            .setDeviceId(client.p4DeviceId())
+                            .setElectionId(client.lastUsedElectionId())
+                            .setAction(VERIFY_AND_COMMIT)
+                            .setConfig(pipelineConfigMsg)
+                            .build();
 
-        final SetForwardingPipelineConfigRequest requestMsg =
-                SetForwardingPipelineConfigRequest
-                        .newBuilder()
-                        .setDeviceId(client.p4DeviceId())
-                        .setElectionId(client.lastUsedElectionId())
-                        .setAction(VERIFY_AND_COMMIT)
-                        .setConfig(pipelineConfigMsg)
-                        .build();
+            final CompletableFuture<Boolean> future = new CompletableFuture<>();
+            final StreamObserver<SetForwardingPipelineConfigResponse> responseObserver =
+                    new StreamObserver<SetForwardingPipelineConfigResponse>() {
+                        @Override
+                        public void onNext(SetForwardingPipelineConfigResponse value) {
+                            if (!DEFAULT_SET_RESPONSE.equals(value)) {
+                                log.warn("Received invalid SetForwardingPipelineConfigResponse " +
+                                                 " from {} [{}]",
+                                         client.deviceId(),
+                                         TextFormat.shortDebugString(value));
+                                future.complete(false);
+                            }
+                            // All good, pipeline is set.
+                            future.complete(true);
+                        }
 
-        final CompletableFuture<Boolean> future = new CompletableFuture<>();
-        final StreamObserver<SetForwardingPipelineConfigResponse> responseObserver =
-                new StreamObserver<SetForwardingPipelineConfigResponse>() {
-                    @Override
-                    public void onNext(SetForwardingPipelineConfigResponse value) {
-                        if (!DEFAULT_SET_RESPONSE.equals(value)) {
-                            log.warn("Received invalid SetForwardingPipelineConfigResponse " +
-                                             " from {} [{}]",
-                                     client.deviceId(),
-                                     TextFormat.shortDebugString(value));
+                        @Override
+                        public void onError(Throwable t) {
+                            client.handleRpcError(t, "SET-pipeline-config");
                             future.complete(false);
                         }
-                        // All good, pipeline is set.
-                        future.complete(true);
-                    }
-                    @Override
-                    public void onError(Throwable t) {
-                        client.handleRpcError(t, "SET-pipeline-config");
-                        future.complete(false);
-                    }
-                    @Override
-                    public void onCompleted() {
-                        // Ignore, unary call.
-                    }
-                };
 
-        client.execRpc(
-                s -> s.setForwardingPipelineConfig(requestMsg, responseObserver),
-                LONG_TIMEOUT_SECONDS);
+                        @Override
+                        public void onCompleted() {
+                            // Ignore, unary call.
+                        }
+                    };
 
-        return future;
+            client.execRpc(
+                    s -> s.setForwardingPipelineConfig(requestMsg, responseObserver),
+                    LONG_TIMEOUT_SECONDS);
+
+            return future;
+        } else {
+            // P4MT: Skip setting pipeline
+            final CompletableFuture<Boolean> future = new CompletableFuture<>();
+            future.complete(true);
+            return future;
+        }
     }
 
     private ForwardingPipelineConfig buildForwardingPipelineConfigMsg(
@@ -149,9 +157,17 @@ final class PipelineConfigClientImpl implements P4RuntimePipelineConfigClient {
     @Override
     public CompletableFuture<Boolean> isPipelineConfigSet(
             PiPipeconf pipeconf, ByteBuffer expectedDeviceData) {
-        return getPipelineCookieFromServer()
-                .thenApply(cfgFromDevice -> comparePipelineConfig(
-                        pipeconf, expectedDeviceData, cfgFromDevice));
+        if(client.roleId() == 0) {
+            return getPipelineCookieFromServer()
+                    .thenApply(cfgFromDevice -> comparePipelineConfig(
+                            pipeconf, expectedDeviceData, cfgFromDevice));
+        } else {
+            //TODO: This is a temporary modification for P4MT support prototype
+            //      We should always check pipeline (the code in "true" condition)
+            final CompletableFuture<Boolean> future = new CompletableFuture<>();
+            future.complete(true);
+            return  future;
+        }
     }
 
     private boolean comparePipelineConfig(

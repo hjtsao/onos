@@ -21,7 +21,12 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.onlab.osgi.DefaultServiceDirectory;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.basics.BasicDeviceConfig;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
 import org.onosproject.net.pi.service.PiPipeconfService;
@@ -59,6 +64,7 @@ public final class StreamClientImpl implements P4RuntimeStreamClient {
     private final P4RuntimeClientImpl client;
     private final DeviceId deviceId;
     private final long p4DeviceId;
+    private final long roleId;
     private final PiPipeconfService pipeconfService;
     private final P4RuntimeControllerImpl controller;
     private final StreamChannelManager streamChannelManager = new StreamChannelManager();
@@ -77,6 +83,7 @@ public final class StreamClientImpl implements P4RuntimeStreamClient {
         this.p4DeviceId = client.p4DeviceId();
         this.pipeconfService = pipeconfService;
         this.controller = controller;
+        this.roleId = client.roleId();
     }
 
     @Override
@@ -120,7 +127,12 @@ public final class StreamClientImpl implements P4RuntimeStreamClient {
 
     @Override
     public boolean isMaster() {
-        return streamChannelManager.isOpen() && isClientMaster.get();
+        if(roleId == 0) {
+            return streamChannelManager.isOpen() && isClientMaster.get();
+        } else {
+            // P4MT: Spoof ONOS that we are master.
+            return true;
+        }
     }
 
     @Override
@@ -148,15 +160,24 @@ public final class StreamClientImpl implements P4RuntimeStreamClient {
     }
 
     private void sendMasterArbitrationUpdate(BigInteger electionId) {
-        log.debug("Sending arbitration update to {}... electionId={}",
-                  deviceId, electionId);
-        final P4RuntimeOuterClass.Uint128 idMsg = bigIntegerToUint128(electionId);
+        if(roleId != 0) {
+            electionId = BigInteger.ONE;
+        }
+        log.info("Sending arbitration update to {}... electionId={}... roleId={}",
+                  deviceId, electionId, roleId);
+        P4RuntimeOuterClass.Uint128 idMsg = bigIntegerToUint128(electionId);
+
+        P4RuntimeOuterClass.Role role = P4RuntimeOuterClass.Role.newBuilder()
+                .setId(roleId)
+                .build();
+
         streamChannelManager.send(
                 StreamMessageRequest.newBuilder()
                         .setArbitration(
                                 P4RuntimeOuterClass.MasterArbitrationUpdate
                                         .newBuilder()
                                         .setDeviceId(p4DeviceId)
+                                        .setRole(role)
                                         .setElectionId(idMsg)
                                         .build())
                         .build());
@@ -221,12 +242,20 @@ public final class StreamClientImpl implements P4RuntimeStreamClient {
             return;
         }
         final boolean isMaster = msg.getStatus().getCode() == Status.OK.getCode().value();
-        log.debug("Received arbitration update from {}: isMaster={}, electionId={}",
-                  deviceId, isMaster, uint128ToBigInteger(msg.getElectionId()));
-        controller.postEvent(new P4RuntimeEvent(
-                P4RuntimeEvent.Type.ARBITRATION_RESPONSE,
-                new ArbitrationUpdateEvent(deviceId, isMaster)));
-        isClientMaster.set(isMaster);
+        log.info("Received arbitration update from {}: isMaster={}, electionId={}",
+                 deviceId, isMaster, uint128ToBigInteger(msg.getElectionId()));
+        if(roleId == 0) {
+            controller.postEvent(new P4RuntimeEvent(
+                    P4RuntimeEvent.Type.ARBITRATION_RESPONSE,
+                    new ArbitrationUpdateEvent(deviceId, isMaster)));
+            isClientMaster.set(isMaster);
+        } else {
+            // P4MT: Spoof ONOS that we are master
+            controller.postEvent(new P4RuntimeEvent(
+                    P4RuntimeEvent.Type.ARBITRATION_RESPONSE,
+                    new ArbitrationUpdateEvent(deviceId, true)));
+            isClientMaster.set(true);
+        }
     }
 
     /**

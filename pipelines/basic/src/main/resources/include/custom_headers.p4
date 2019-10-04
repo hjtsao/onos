@@ -20,15 +20,19 @@ struct headers_t {
     packet_out_header_t packet_out;
     packet_in_header_t packet_in;
     ethernet_t ethernet;
+    vlan_t vlan;
     ipv4_t ipv4;
     tcp_t tcp;
     udp_t udp;
 }
 
 struct local_metadata_t {
-    bit<16>       l4_src_port;
-    bit<16>       l4_dst_port;
-    next_hop_id_t next_hop_id;
+    bit<16>              l4_src_port;
+    bit<16>              l4_dst_port;
+    next_hop_id_t        next_hop_id;
+    role_id_t            role_id;
+    user_pipeline_id_t   user_pipeline_id;
+    bit<1>               user_pkt_vaild;
 }
 
 #endif

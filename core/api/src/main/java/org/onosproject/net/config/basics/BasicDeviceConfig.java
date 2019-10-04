@@ -34,6 +34,7 @@ public final class BasicDeviceConfig extends BasicElementConfig<DeviceId> {
     private static final String SW_VERSION = "swVersion";
     private static final String SERIAL = "serial";
     private static final String DEVICE_KEY_ID = "deviceKeyId";
+    private static final String P4MT_ROLE = "p4mtRoleId";
 
     private static final int DRIVER_MAX_LENGTH = 256;
     private static final int MANUFACTURER_MAX_LENGTH = 256;
@@ -52,7 +53,7 @@ public final class BasicDeviceConfig extends BasicElementConfig<DeviceId> {
                 && hasOnlyFields(ALLOWED, NAME, LOC_TYPE, LATITUDE, LONGITUDE,
                 GRID_Y, GRID_X, UI_TYPE, RACK_ADDRESS, OWNER, TYPE, DRIVER, ROLES,
                 MANUFACTURER, HW_VERSION, SW_VERSION, SERIAL,
-                MANAGEMENT_ADDRESS, DEVICE_KEY_ID)
+                MANAGEMENT_ADDRESS, DEVICE_KEY_ID, P4MT_ROLE)
                 && isValidLength(DRIVER, DRIVER_MAX_LENGTH)
                 && isValidLength(MANUFACTURER, MANUFACTURER_MAX_LENGTH)
                 && isValidLength(HW_VERSION, MANUFACTURER_MAX_LENGTH)
@@ -225,6 +226,14 @@ public final class BasicDeviceConfig extends BasicElementConfig<DeviceId> {
     public BasicDeviceConfig deviceKeyId(DeviceKeyId deviceKeyId) {
         return (BasicDeviceConfig) setOrClear(DEVICE_KEY_ID,
                 deviceKeyId != null ? deviceKeyId.id() : null);
+    }
+
+    /**
+     * P4MT: Get role id.
+     */
+    public Long roleId() {
+        String s = get(P4MT_ROLE, "0");
+        return Long.getLong(s);
     }
 
     // TODO: device port meta-data to be configured via BasicPortsConfig
