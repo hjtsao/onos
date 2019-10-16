@@ -150,6 +150,7 @@ final class WriteRequestImpl implements P4RuntimeWriteClient.WriteRequest {
     public CompletableFuture<P4RuntimeWriteClient.WriteResponse> submit() {
         final P4RuntimeOuterClass.WriteRequest writeRequest = requestMsg
                 .setElectionId(client.lastUsedElectionId())
+                .setRoleId(this.client.roleId())
                 .build();
         log.debug("Sending write request to {} with {} updates...",
                   client.deviceId(), writeRequest.getUpdatesCount());
